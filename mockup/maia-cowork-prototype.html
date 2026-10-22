@@ -1,0 +1,1530 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MAIA Cowork — prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#ffffff; --text:#0a0a0a; --muted:#6b7280; --border:#ebebeb; --surface:#f4f4f5;
+    --side:#fafafa; --blue:rgb(20,124,255); --blue-soft:rgba(20,124,255,.08);
+    --radius:10px; --card-radius:12px;
+    --accent:linear-gradient(90deg,#22d3a8,#22d3ee,#2563eb);
+    --page:#eef0f3; --ink:#1a1416; --violet:#5b5bd6;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Inter","Graphik",system-ui,-apple-system,sans-serif;color:var(--text);background:var(--page);-webkit-font-smoothing:antialiased;font-size:14px}
+  a{color:inherit;text-decoration:none}
+  svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+
+  /* ---------- persistent top bar ---------- */
+  .top{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid var(--border)}
+  .top::before{content:"";display:block;height:3px;background:var(--accent)}
+  .top-in{height:44px;padding:0 20px;display:flex;align-items:center;gap:14px}
+  .back{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;color:#3f3f46}
+  .back:hover{border-color:var(--blue);color:var(--blue)}
+  body[data-route="diagram"] .back{display:none}
+  [hidden]{display:none!important}
+  .cur{font-size:14px;font-weight:600}
+  .top .meta{margin-left:auto;font-size:12.5px;color:var(--muted)}
+
+  /* ---------- router ---------- */
+  .screen{display:none}
+  .screen.on{display:block}
+
+  /* ---------- stage / frame (fit to window) ---------- */
+  .stage{padding:16px 16px 8px;display:flex;justify-content:center;overflow:hidden}
+  .scaler{width:1440px;height:900px;flex:none;transform-origin:top center}
+  .frame{width:1440px;height:900px;background:var(--bg);border:1px solid #dcdde1;border-radius:14px;overflow:hidden;
+    box-shadow:0 1px 2px rgba(16,24,40,.04),0 24px 48px -12px rgba(16,24,40,.14);display:flex;position:relative}
+
+  /* ---------- diagram ---------- */
+  .dg{flex-direction:column}
+  .dg-head{display:flex;align-items:baseline;gap:14px;padding:22px 36px 0}
+  .dg-head h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em}
+  .dg-head p{margin:0;color:var(--muted);font-size:14px}
+  .seg{margin-left:auto;display:inline-flex;border:1px solid var(--border);border-radius:999px;padding:3px;background:#fff}
+  .seg a{padding:5px 12px;border-radius:999px;font-size:13px;color:var(--muted);text-decoration:none}
+  .seg a.on{background:#0a0a0a;color:#fff}
+  .node.hl.warn .box{stroke:#f59e0b;fill:#fff7e6}
+  .dg svg.map{display:block;height:780px;margin:6px auto 0;font-family:inherit}
+  .map .region{fill:#f1f1f1}
+  .map .cap{font-size:13px;font-weight:600;fill:#71717a}
+  .map .box{fill:#fff;stroke:#d4d4d8;stroke-width:1.5;transition:stroke .12s,stroke-width .12s}
+  .map .dark .box{fill:var(--ink);stroke:var(--ink)}
+  .map .hl .box{fill:#e8e9ff;stroke:var(--violet)}
+  .map .vi .box{stroke:var(--violet)}
+  .map .sf .box{stroke:#4fc3f7}
+  .map .dsh .box{stroke:#a1a1aa;stroke-dasharray:6 5}
+  .map .kg .box{stroke:#7c3aed;fill:#f5f0ff}
+  .map .s.sm{font-size:11px}
+  .map .own{font-size:10px;font-weight:600;fill:#9ca3af;letter-spacing:.06em;text-transform:uppercase;text-anchor:end}
+  .map .sep{stroke:#d4d4d8;stroke-width:1;stroke-dasharray:6 6}
+  .map .lane{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;fill:#a1a1aa;text-anchor:middle}
+  .map .t{font-size:16px;font-weight:700;fill:var(--text);text-anchor:middle}
+  .map .dark .t{fill:#fff}
+  .map .s{font-size:12.5px;fill:var(--muted);text-anchor:middle}
+  .map .hint{font-size:10.5px;font-weight:500;fill:#a1a1aa;text-anchor:middle;letter-spacing:.02em}
+  .map .node{cursor:pointer;outline:none}
+  .map .node:hover .box,.map .node:focus-visible .box{stroke:var(--blue);stroke-width:2.5}
+  .map .node:hover .hint,.map .node:focus-visible .hint{fill:var(--blue)}
+  .map .ln{fill:none;stroke:#52525b;stroke-width:1.6}
+  .map .dash{stroke-dasharray:7 5}
+  .map .dot{stroke-dasharray:.5 6;stroke-linecap:round;stroke-width:2.2}
+  .map .lbl{font-size:13px;font-weight:500;fill:#3f3f46;text-anchor:middle;dominant-baseline:central}
+  .map .chipbg{fill:#fff;stroke:#e4e4e7}
+  /* Stakeholder diagram (#s-diagram-exec) */
+  #s-diagram-exec .map .box.xpill{fill:#fff;stroke:#3b82f6;stroke-width:2}
+  #s-diagram-exec .map .xpt{font-size:22px;font-weight:700;fill:#3b82f6;text-anchor:middle}
+  #s-diagram-exec .map .xband{fill:#fff;stroke:#b5b5b5;stroke-width:2}
+  #s-diagram-exec .map .xcap{font-size:14px;font-weight:600;fill:#6b7280;letter-spacing:.1em;text-anchor:middle}
+  #s-diagram-exec .map .box.xsub{fill:#fff;stroke:#5b5bd6;stroke-width:2}
+  #s-diagram-exec .map .box.xsub-hl{fill:#eef0ff}
+  #s-diagram-exec .map .xst{font-size:26px;font-weight:700;fill:#0a0a0a;text-anchor:middle}
+  #s-diagram-exec .map .xss{font-size:16px;fill:#6b7280;text-anchor:middle}
+  #s-diagram-exec .map .xlink{stroke:#6b7280;stroke-width:1.6;stroke-dasharray:6 5}
+  #s-diagram-exec .map .xlk{font-size:12px;fill:#6b7280;text-anchor:middle}
+  #s-diagram-exec .map .xdl{stroke:#0a0a0a;stroke-width:2;stroke-dasharray:1 6;stroke-linecap:round}
+  #s-diagram-exec .map .xdot{fill:#0a0a0a}
+  #s-diagram-exec .map .box.xb{fill:#fff;stroke:#b5b5b5;stroke-width:2}
+  #s-diagram-exec .map .box.xred{stroke:#8b1a2b;stroke-width:3}
+  #s-diagram-exec .map .xt{font-size:24px;font-weight:700;fill:#0a0a0a}
+  #s-diagram-exec .map .xdiv{stroke:#d4d4d8;stroke-width:1}
+  #s-diagram-exec .map .xli{font-size:18px;fill:#0a0a0a}
+  #s-diagram-exec .map .xh{font-size:11px;fill:#6b7280;text-anchor:end}
+  #s-diagram-exec .map .xbadge{fill:#8b1a2b}
+  #s-diagram-exec .map .xbt{font-size:11px;font-weight:700;fill:#fff;text-anchor:middle;letter-spacing:.04em}
+  #s-diagram-exec .map .node:hover .box,#s-diagram-exec .map .node:focus-visible .box{stroke:var(--blue);stroke-width:3}
+  #s-diagram-exec .map .node:hover .xh,#s-diagram-exec .map .node:focus-visible .xh{fill:var(--blue)}
+  .legend{display:flex;justify-content:center;gap:28px;font-size:13px;color:#3f3f46;padding-top:6px}
+  .legend span{display:inline-flex;align-items:center;gap:8px}
+  .legend svg{width:34px;height:10px}
+  .legend .sw{width:16px;height:12px;border-radius:3px;background:#f1f1f1;border:1px solid #e4e4e7}
+  .legend .own-s{font-size:10px;font-weight:600;color:#9ca3af;letter-spacing:.06em;text-transform:uppercase}
+
+  /* ---------- Cowork sidebar (reused) ---------- */
+  .side{width:260px;flex:none;background:var(--side);border-right:1px solid var(--border);display:flex;flex-direction:column;position:relative}
+  .brand{display:flex;align-items:center;gap:8px;padding:16px 12px 12px 16px}
+  .brand img{width:24px;height:24px;display:block}
+  .wm{height:16px;width:auto;display:block}
+  .tag{font-size:10px;font-weight:600;color:var(--muted);border:1px solid var(--border);background:#fff;border-radius:6px;padding:1px 5px;letter-spacing:.02em}
+  .brand .tools{margin-left:auto;display:flex;gap:2px}
+  .ib{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--muted);cursor:pointer;border:0;background:none}
+  .ib:hover{background:var(--surface);color:var(--text)}
+  .newchat{margin:4px 12px 10px;height:36px;border:1px solid var(--border);background:#fff;border-radius:var(--radius);display:flex;align-items:center;gap:8px;padding:0 12px;font-weight:500;color:var(--text);box-shadow:0 1px 1px rgba(0,0,0,.03)}
+  .newchat:hover{border-color:#d4d4d8}
+  .scroll{flex:1;overflow:hidden;padding:0 8px}
+  .nav a,.row{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:var(--radius);color:#3f3f46;font-size:14px;cursor:pointer;white-space:nowrap;overflow:hidden}
+  .nav a:hover,.row:hover,.chat:hover{background:var(--surface);color:var(--text)}
+  .nav a svg,.row svg{color:var(--muted)}
+  .nav a.on{background:#fff;color:var(--text);font-weight:500;box-shadow:inset 0 0 0 1px var(--border)}
+  .nav a.on svg{color:var(--text)}
+  .sec{font-size:12px;font-weight:500;color:var(--muted);padding:12px 10px 4px}
+  .chat{display:block;height:28px;line-height:28px;padding:0 10px;border-radius:8px;color:#3f3f46;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .chat.on{background:#fff;color:var(--text);box-shadow:inset 0 0 0 1px var(--border)}
+  .links{padding:8px;border-top:1px solid var(--border)}
+  .links .ext{height:auto;padding:7px 10px;align-items:flex-start}
+  .links .ext svg{margin-top:2px}
+  .links .ext .t{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .links .ext small{font-size:11px;color:var(--muted)}
+  .links .ext .arrow{margin-left:auto;width:13px;height:13px;margin-top:3px}
+  .links hr{border:0;border-top:1px solid var(--border);margin:6px 4px}
+  .org{justify-content:space-between}
+  .org span{display:flex;align-items:center;gap:10px}
+  .user{display:flex;align-items:center;gap:10px;padding:8px 6px 8px 10px;border-radius:var(--radius)}
+  .user:hover{background:var(--surface)}
+  .av{width:28px;height:28px;border-radius:50%;background:#e4e4e7;display:grid;place-items:center;font-size:11px;font-weight:600;color:#3f3f46;flex:none}
+  .user .who{min-width:0;flex:1;line-height:1.25}
+  .user .who b{display:block;font-size:13.5px;font-weight:600}
+  .user .who span{font-size:12px;color:var(--muted)}
+
+  /* ---------- Cowork main (reused) ---------- */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+  .crumbs{height:52px;flex:none;display:flex;align-items:center;gap:6px;padding:0 24px;font-size:13.5px;color:var(--muted)}
+  .crumbs b{color:var(--text);font-weight:500}
+  .crumbs .chev{width:14px;height:14px}
+  .help-btn{margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;font-size:13px;color:var(--text);cursor:pointer;background:#fff}
+  .help-btn:hover{background:var(--surface)}
+  .help-btn .i{width:15px;height:15px}
+  .content{width:100%;max-width:760px;margin:0 auto;padding-top:118px}
+  .greet{font-size:28px;line-height:1.25;letter-spacing:-.01em;margin:0}
+  .greet b{font-weight:600;display:block}
+  .greet span{color:var(--muted);font-weight:400}
+  .envrow{margin:22px 0 10px;display:flex;gap:8px}
+  .chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--border);border-radius:999px;background:#fff;font-size:12.5px;font-weight:500;color:#3f3f46;cursor:pointer;white-space:nowrap}
+  .chip svg{width:14px;height:14px;color:var(--muted)}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:#22c55e}
+  .composer{border:1px solid var(--border);border-radius:14px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px -8px rgba(16,24,40,.10);padding:16px 14px 12px}
+  .composer .ph{color:#9ca3af;font-size:15px;min-height:52px;padding:0 4px}
+  .tb{display:flex;align-items:center;gap:6px}
+  .tb .ib{border:1px solid var(--border);width:30px;height:30px}
+  .chip.ds{border-color:#cfe3ff;color:#0b4fae}
+  .chip.ds .sq{width:12px;height:12px;border-radius:3px;background:var(--accent)}
+  .tb .grow{flex:1}
+  .send{width:34px;height:34px;border-radius:50%;background:var(--blue);border:0;display:grid;place-items:center;color:#fff;cursor:pointer;box-shadow:0 2px 6px rgba(20,124,255,.35)}
+  .send svg{stroke-width:2.2}
+  .sugg{margin-top:28px}
+  .sugg .lbl{font-size:12px;font-weight:500;color:var(--muted);padding:0 10px 6px}
+  .srow{display:flex;align-items:center;gap:12px;padding:11px 10px;border-radius:var(--radius);cursor:pointer;font-size:14px}
+  .srow + .srow{border-top:1px solid #f3f3f3}
+  .srow:hover{background:var(--surface)}
+  .srow svg{color:var(--muted)}
+  .srow .tx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .srow .tx b{font-weight:600;margin-right:6px}
+  .srow .tx span{color:var(--muted)}
+  .srow .rt{font-size:12.5px;color:var(--muted);white-space:nowrap}
+  a.srow .rt{color:var(--blue)}
+
+  /* ---------- hub / skills pages ---------- */
+  .hub{padding:4px 40px 0;overflow:hidden}
+  .hub-h{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+  .hub-h h2{font-size:22px;font-weight:600;margin:0;letter-spacing:-.01em}
+  .hub-h .btn{margin-left:auto}
+  .hub .sub{color:var(--muted);margin:0 0 18px;font-size:13.5px}
+  .bar{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+  .tabs{display:flex;gap:2px;background:var(--surface);border-radius:10px;padding:3px}
+  .tabs span{height:28px;padding:0 12px;display:flex;align-items:center;gap:6px;border-radius:8px;font-size:13px;font-weight:500;color:#52525b;cursor:pointer}
+  .tabs span.on{background:#fff;color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .tabs em{font-style:normal;color:#a1a1aa;font-size:12px}
+  .search{margin-left:auto;width:300px;height:34px;border:1px solid var(--border);border-radius:9px;display:flex;align-items:center;gap:8px;padding:0 12px;color:#9ca3af;font-size:13px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .card{background:#fff;border:1px solid var(--border);border-radius:var(--card-radius);padding:18px 18px 16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 2px rgba(16,24,40,.03)}
+  .card .hd{display:flex;align-items:center;gap:10px}
+  .card .ic{width:34px;height:34px;border-radius:9px;background:var(--surface);display:grid;place-items:center;color:#3f3f46;flex:none}
+  .card .ic.app{background:var(--blue-soft);color:var(--blue)}
+  .card h3{font-size:15px;font-weight:600;margin:0}
+  .card h3 small{display:block;font-size:12px;font-weight:400;color:var(--muted);margin-top:1px}
+  .card p{margin:0;color:#52525b;font-size:13px;line-height:1.5}
+  .card .ft{display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:10px;border-top:1px solid #f3f3f3;font-size:12px;color:var(--muted)}
+  .card .ft .btn{margin-left:auto}
+  .badge{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;font-size:11px;font-weight:600;background:var(--surface);color:#52525b;white-space:nowrap}
+  .badge.end{background:#e8f6ee;color:#15803d}
+  .badge.app{background:var(--blue-soft);color:#0b5ed7}
+  .btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 14px;border-radius:999px;background:var(--blue);color:#fff;font-size:13px;font-weight:500;border:0;cursor:pointer;white-space:nowrap}
+  .btn:hover{filter:brightness(1.07)}
+  .btn svg{width:14px;height:14px}
+  .btn.ghost{background:#fff;color:var(--text);border:1px solid var(--border)}
+  .btn.ghost:hover{border-color:var(--blue);color:var(--blue);filter:none}
+  .btn.lg{height:38px;padding:0 18px;font-size:14px}
+
+  /* ---------- help drawer ---------- */
+  .scrim{position:absolute;inset:0;background:rgba(10,10,10,.18);opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
+  .drawer{position:absolute;top:0;right:0;bottom:0;width:360px;background:#fff;border-left:1px solid var(--border);box-shadow:-16px 0 40px -16px rgba(16,24,40,.2);transform:translateX(100%);transition:transform .22s ease;z-index:21;padding:20px}
+  .frame.help .scrim{opacity:1;pointer-events:auto}
+  .frame.help .drawer{transform:none}
+  .drawer .dh{display:flex;align-items:center;margin-bottom:16px}
+  .drawer h3{margin:0;font-size:17px;font-weight:600}
+  .drawer .ib{margin-left:auto}
+  .ditem{display:flex;gap:12px;padding:14px 12px;border:1px solid var(--border);border-radius:var(--card-radius);margin-bottom:10px;cursor:pointer}
+  .ditem:hover{border-color:var(--blue)}
+  .ditem .ic{width:32px;height:32px;border-radius:8px;background:var(--surface);display:grid;place-items:center;flex:none}
+  .ditem b{display:block;font-size:14px;font-weight:600;margin-bottom:2px}
+  .ditem span{font-size:12.5px;color:var(--muted);line-height:1.45}
+  .ditem.acc .ic{background:linear-gradient(135deg,#f97316,#e11d48);color:#fff}
+
+  /* ---------- External MAIA ---------- */
+  .xm{flex-direction:column}
+  .domain{height:34px;flex:none;display:flex;align-items:center;justify-content:center;gap:8px;background:#0a0a0a;color:#e4e4e7;font-size:12.5px}
+  .domain code{font-family:inherit;color:#fff;font-weight:600}
+  .domain svg{width:13px;height:13px}
+  .ext-body{flex:1;display:flex;min-height:0}
+  .rail{width:200px;flex:none;border-right:1px solid var(--border);display:flex;flex-direction:column;padding:14px 10px}
+  .rail .top-r{display:flex;justify-content:space-between;align-items:center;padding:0 6px}
+  .rail .top-r img{width:22px;height:22px}
+  .rail .grow{flex:1}
+  .rail .row{font-size:13px;height:34px}
+  .rail hr{border:0;border-top:1px solid var(--border);margin:8px 4px}
+  .mpage{flex:1;overflow:hidden;padding:20px 64px 0}
+  .mhead{display:flex;align-items:center;gap:10px}
+  .mhead .pw{font-size:12px;font-weight:800;letter-spacing:.14em}
+  .mhead .pipe{width:1px;height:20px;background:#0a0a0a}
+  .mhead .wm{height:18px}
+  .mhead .ver{font-size:11px;color:var(--muted)}
+  .client{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 10px 0 6px;border:1px solid var(--border);border-radius:999px;font-size:13px;font-weight:600;margin-left:10px}
+  .client i{width:20px;height:20px;border-radius:50%;background:#7c2d12;color:#fff;font-style:normal;font-size:10px;display:grid;place-items:center}
+  .mnav{display:flex;align-items:center;gap:8px;margin:20px 0 18px}
+  .mnav span{height:32px;padding:0 16px;border-radius:999px;display:flex;align-items:center;font-size:13px;font-weight:600;cursor:pointer}
+  .mnav span.on{background:#0a0a0a;color:#fff}
+  .mnav .r{margin-left:auto;display:flex;gap:10px;align-items:center}
+  .sbtn{height:32px;padding:0 12px;border:1.5px solid #0a0a0a;border-radius:6px;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500}
+  .hero{background:linear-gradient(90deg,#22d3a8,#22d3ee,#2563eb);border-radius:14px;padding:34px 38px;color:#fff}
+  .hero h2{margin:0;font-size:30px;font-weight:700;letter-spacing:-.015em}
+  .hero p{margin:8px 0 22px;font-size:18px;opacity:.95}
+  .hero .btn{background:#fff;color:#0a0a0a}
+  .dots{display:flex;justify-content:center;gap:6px;margin:12px 0 18px}
+  .dots i{width:12px;height:6px;border-radius:3px;background:#d4d4d8}
+  .dots i.on{width:20px;background:#a1a1aa}
+  .shelf{background:#f0f0f0;border-radius:14px;padding:18px 18px 20px}
+  .shelf h3{margin:0 0 14px;font-size:18px;font-weight:500}
+  .acard h3{color:var(--blue);font-size:15px}
+  .acard .by{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .acard .by i{width:10px;height:10px;border-radius:50%;background:#22c55e}
+  .acard .by b{color:var(--text);font-weight:600}
+  .stars{color:#f5b301;letter-spacing:1px;font-size:13px}
+  .stars s{color:#d4d4d8;text-decoration:none}
+  .acard .q{font-size:12px;color:var(--muted);display:flex;gap:10px;align-items:center}
+
+  /* ---------- External MAIA: client spaces list + create ---------- */
+  .xback{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);margin-bottom:10px}
+  .xback:hover{color:var(--blue)}
+  a.client:hover{border-color:var(--blue)}
+  .rail .user .who small{display:block;font-size:10.5px;color:var(--blue);font-weight:600;margin-top:1px}
+  .xwrap{max-width:1040px}
+  .xh{display:flex;align-items:flex-start;gap:20px;margin:6px 0 22px}
+  .xh h1{margin:0;font-size:26px;font-weight:600;letter-spacing:-.015em}
+  .xh p{margin:6px 0 0;color:var(--muted);font-size:14px}
+  .xh .act{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+  .xh .act small{font-size:11px;color:var(--muted)}
+  .scard .hd{display:flex;align-items:center;gap:12px}
+  .scard .lg{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:14px;font-weight:700;flex:none}
+  .scard h3{font-size:16px}
+  .role{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;font-size:11px;font-weight:600;margin-top:4px}
+  .role.admin{background:var(--blue-soft);color:var(--blue)}
+  .role.member{background:var(--surface);color:#52525b}
+  .sst{margin-left:auto;align-self:flex-start;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:#52525b;font-weight:500}
+  .sst i{width:8px;height:8px;border-radius:50%;background:#22c55e}
+  .sst.pilot i{background:#a1a1aa}
+  .scard .cnt{font-size:13px;color:#3f3f46}
+  .scard .ft span{white-space:nowrap}
+  .xnote{margin-top:20px;font-size:13px;color:var(--muted)}
+  .crumb{font-size:12.5px;color:var(--muted);margin:0 0 12px}
+  .crumb a:hover{color:var(--blue)}
+  .fcard{max-width:720px;background:#fff;border:1px solid var(--border);border-radius:14px;padding:22px 26px;box-shadow:0 1px 2px rgba(16,24,40,.03)}
+  .fcard h1{margin:0;font-size:21px;font-weight:600;letter-spacing:-.01em}
+  .fcard .sub{margin:5px 0 14px;font-size:13px;color:var(--muted);line-height:1.5}
+  .fld{display:grid;grid-template-columns:150px 1fr;gap:14px;align-items:center;padding:8px 0;border-top:1px solid #f3f3f3}
+  .fld>label{font-size:13px;font-weight:600}
+  .fld .cap{display:block;font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.4}
+  .inp{height:32px;border:1px solid #d4d4d8;border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:13px;background:#fff}
+  .inp.ph{color:#a1a1aa}
+  .inp .pre{color:var(--muted);border-right:1px solid #e4e4e7;padding-right:8px;margin-right:8px;height:100%;display:flex;align-items:center}
+  .inp.num{width:80px}
+  .drop{height:40px;border:1.5px dashed #d4d4d8;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:12.5px;color:var(--muted);background:#fafafa}
+  .drop svg{width:14px;height:14px}
+  .checks{display:flex;gap:16px;flex-wrap:wrap;font-size:13px}
+  .checks span{display:inline-flex;align-items:center;gap:6px}
+  .checks b{width:15px;height:15px;border-radius:4px;border:1.5px solid #a1a1aa;display:inline-grid;place-items:center;font-size:10px;color:#fff;line-height:1}
+  .checks b.y{background:var(--blue);border-color:var(--blue)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chips span{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;border:1px solid var(--border);border-radius:999px;font-size:12.5px;font-weight:500}
+  .chips span i{width:20px;height:20px;border-radius:50%;background:#e4e4e7;font-style:normal;font-size:9.5px;font-weight:600;display:grid;place-items:center;color:#3f3f46}
+  .chips span.add{padding:0 10px;border-style:dashed;color:var(--blue)}
+  .dnote{margin-top:8px;padding:9px 12px;background:var(--blue-soft);border-radius:8px;font-size:12.5px;color:#1e3a8a}
+  .facts{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+
+  /* ---------- doc-style pages (studio, architect, github, claude, lyzr, journeys) ---------- */
+  .doc{flex-direction:column;justify-content:center;background:#fafafa;padding:48px 64px;overflow:hidden}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);margin-bottom:8px}
+  .doc h1{font-size:30px;font-weight:600;letter-spacing:-.015em;margin:0}
+  .below{width:min(1440px,calc(100vw - 32px));margin:0 auto;padding:12px 0 48px}
+  .below h1{font-size:24px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em}
+  .below .lede{margin-bottom:8px}
+  .enh-h{font-size:17px;font-weight:600;margin:28px 0 10px}
+  .enh{border:1px solid var(--border);border-radius:12px;background:#fff;margin-bottom:10px;box-shadow:0 1px 2px rgba(16,24,40,.03)}
+  .enh summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:auto 1fr;column-gap:12px;row-gap:3px;align-items:center;padding:14px 18px}
+  .enh summary::-webkit-details-marker{display:none}
+  .enh summary b{font-size:15px;font-weight:600}
+  .enh summary .sub{grid-column:2;font-size:13.5px;color:var(--muted)}
+  .enh summary::after{content:"+";grid-column:3;grid-row:1 / span 2;font-size:20px;color:var(--muted);padding-left:12px}
+  .enh[open] summary::after{content:"\2013"}
+  .enh[open] summary{border-bottom:1px solid var(--border)}
+  .enh-body{padding:14px 18px 6px;font-size:14px;line-height:1.55;max-width:820px}
+  .enh-body p{margin:0 0 10px}
+  .enh-body ul{margin:0 0 10px 18px;padding:0}
+  .tag{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:600;letter-spacing:.02em}
+  .tag.ask{background:#fff4e0;color:#9a5b00;border:1px solid #f3d9a6}
+  .tag.decide{background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe}
+  #s-compat .scaler{height:auto}
+  #s-compat .stage{overflow:visible;padding-bottom:48px}
+  .frame.bc{height:auto;min-height:900px;overflow:visible;justify-content:flex-start;padding-top:40px}
+  .bc h1{font-size:24px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em}
+  .bc .bc-h,.mcp .bc-h{font-size:17px;font-weight:600;margin:28px 0 8px}
+  .bc p{font-size:14px;line-height:1.55;margin:0 0 8px;max-width:860px}
+  .bc .bc-l,.mcp .bc-l{margin:0 0 10px 18px;padding:0;font-size:14px;line-height:1.55;max-width:860px}
+  .bc .bc-t,.mcp .bc-t{border-collapse:collapse;width:100%;font-size:13.5px;margin:6px 0 12px;background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .bc .bc-t th,.mcp .bc-t th{text-align:left;font-weight:600;background:var(--surface);padding:9px 12px;border-bottom:1px solid var(--border)}
+  .bc .bc-t td,.mcp .bc-t td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.45}
+  .bc .bc-t tr:last-child td,.mcp .bc-t tr:last-child td{border-bottom:0}
+  #s-mcp .scaler{height:auto}
+  #s-mcp .stage{overflow:visible;padding-bottom:48px}
+  .frame.mcp{height:auto;min-height:900px;overflow:visible;justify-content:flex-start;padding-top:40px}
+  .mcp .lede{margin-bottom:4px}
+  .mcp code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#3f3f46}
+  .mcp .chain .step{min-width:0;padding:16px 16px 18px;gap:6px}
+  .mcp .chain .step b{font-size:14px}
+  .mcp .chain .step span{font-size:12.5px}
+  .mcp .chain .arr{width:28px}
+  .mcp .chain .arr svg{width:18px;height:18px}
+  .mcp .srv{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .mcp .srv .card{min-width:0}
+  .mcp .card .kv{font-size:13px;color:#3f3f46}
+  .mcp .card .kv b{font-weight:600;color:var(--ink);margin-right:6px}
+  .mcp .srv .bc-t{font-size:12.5px;margin:2px 0 4px}
+  .mcp .srv .bc-t th,.mcp .srv .bc-t td{padding:7px 10px}
+  .mcp .srv .bc-t td:first-child{width:38%}
+  .mcp .srv .bc-t td code{white-space:normal;word-break:break-word}
+  .mcp .mnote{margin:0;padding:8px 12px;background:var(--blue-soft);border-radius:8px;font-size:12.5px;color:#1e3a8a}
+  .mcp .xc{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .mcp .xc .card{padding:18px 20px}
+  .mcp .q{font-size:14px;color:#3f3f46;font-style:italic;margin:0 0 10px}
+  .mcp .we{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+  .mcp .trace{margin:0;padding:16px 20px 16px 38px;background:#fff;border:1px solid var(--border);border-radius:var(--card-radius);font-size:13.5px;line-height:1.55;color:#3f3f46}
+  .mcp .trace li{margin:3px 0}
+  .mcp .ans{background:#fff;border:1px solid var(--border);border-radius:var(--card-radius);padding:18px 20px;box-shadow:0 1px 2px rgba(16,24,40,.03);font-size:13.5px;line-height:1.55;color:#3f3f46}
+  .mcp .ans-hd{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:8px}
+  .mcp .ans-n{font-size:30px;font-weight:600;color:var(--ink);letter-spacing:-.01em}
+  .mcp .ans-n span{font-size:14px;font-weight:400;color:var(--muted);margin-left:6px;letter-spacing:0}
+  .mcp .ans p{margin:6px 0 4px}
+  .mcp .ans ul{margin:0 0 12px 18px;padding:0}
+  .mcp .srcs{display:flex;flex-wrap:wrap;gap:6px}
+  .mcp .src{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--border);background:var(--surface);font-size:12px;color:#3f3f46}
+  .mcp .src svg{width:14px;height:14px}
+  .top .plan-link{margin-left:16px;font-size:13px;color:var(--blue);text-decoration:none}
+  .lede{font-size:16px;color:var(--muted);margin:10px 0 32px;max-width:820px;line-height:1.55}
+  .doc .card{padding:22px 24px}
+  .doc .card h3{font-size:16px}
+  .flows{display:flex;flex-wrap:wrap;gap:6px}
+  .pill{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;border:1px solid #cfe3ff;background:#f5f9ff;color:#0b5ed7;font-size:12.5px;font-weight:500}
+  a.pill:hover{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .note{margin-top:22px;display:flex;gap:10px;align-items:flex-start;background:#fff8eb;border:1px solid #fde4b0;color:#7a4b00;border-radius:var(--card-radius);padding:14px 16px;font-size:13.5px;line-height:1.5}
+  .note svg{margin-top:2px}
+  .center{align-items:center;justify-content:center}
+  .solo{width:640px;padding:36px 40px}
+  .solo p{font-size:15px;line-height:1.65;color:#3f3f46}
+  .solo .acts{display:flex;gap:10px;margin-top:8px}
+  .chain{display:flex;align-items:stretch;gap:0}
+  .step{flex:1;background:#fff;border:1px solid var(--border);border-radius:var(--card-radius);padding:22px;display:flex;flex-direction:column;gap:8px;transition:border-color .12s,box-shadow .12s}
+  a.step:hover{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+  .step .n{width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px;font-weight:600;display:grid;place-items:center}
+  .step b{font-size:16px}
+  .step span{font-size:13.5px;color:var(--muted);line-height:1.5}
+  .step .go{margin-top:auto;color:var(--blue);font-size:13px;font-weight:500}
+  .step.dash{border-style:dashed;border-color:#c4c4cc;background:transparent}
+  .arr{width:56px;flex:none;display:grid;place-items:center;color:#a1a1aa}
+  .arr svg{width:22px;height:22px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  ul.bul{margin:4px 0 0;padding-left:18px;line-height:1.75;color:#3f3f46}
+
+  /* architect */
+  .arch{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:var(--card-radius);overflow:hidden;font-size:13px}
+  th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;background:#fafafa;padding:11px 14px;border-bottom:1px solid var(--border)}
+  td{padding:14px;border-bottom:1px solid #f3f3f3;vertical-align:middle}
+  tr:last-child td{border-bottom:0}
+  td b{font-weight:600}
+  td code{white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#3f3f46}
+  .st{display:inline-flex;align-items:center;gap:6px;font-weight:500}
+  .st::before{content:"";width:8px;height:8px;border-radius:50%;background:#22c55e}
+  .st.b::before{background:#f59e0b}
+  .st.f::before{background:#ef4444}
+  .st.f{color:#b91c1c}
+  .tgt{display:block;margin-bottom:12px}
+  .tgt b{display:block;font-size:14px;margin-bottom:2px}
+  .tgt span{font-size:12.5px;color:var(--muted);line-height:1.5;display:block;margin-bottom:8px}
+</style>
+</head>
+<body data-route="diagram">
+
+<!-- Icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 1.9 5.8L20 10l-5 3.6L16.6 20 12 16.4 7.4 20 9 13.6 4 10l6.1-1.2z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.2"/><circle cx="17.5" cy="10.5" r="1.2"/><circle cx="8.5" cy="7.5" r="1.2"/><circle cx="6.5" cy="12.5" r="1.2"/><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A5.6 5.6 0 0 0 22 9.8C22 5.5 17.5 2 12 2z"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 14h.01M15 14h.01"/><circle cx="12" cy="3.5" r="1"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></symbol>
+  <symbol id="i-org" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 21v-4h6v4M9 7h.01M15 7h.01M9 11h.01M15 11h.01"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15l3-3 3 3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M18 10.5c0 4-6 3-10.5 6"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M8 16v-5M13 16V8M18 16v-9"/></symbol>
+  <symbol id="i-net" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v5M12 12l-6 5.5M12 12l6 5.5"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+</svg>
+
+<!-- ===== Persistent top bar ===== -->
+<header class="top">
+  <div class="top-in">
+    <a class="back" href="#diagram"><svg class="i"><use href="#i-left"/></svg>Diagram</a>
+    <span class="cur" id="cur">Architecture diagram</span>
+    <span class="meta">MAIA Cowork + External MAIA · clickable prototype · 21 Oct review<a class="plan-link" href="#compat">Backwards compatibility plan →</a></span>
+  </div>
+</header>
+
+<!-- ===== 1. Diagram ===== -->
+<section class="screen" id="s-diagram">
+<div class="stage"><div class="scaler"><div class="frame dg">
+  <div class="dg-head"><h1>Proposed architecture</h1><p>Click any box to see that surface.</p><div class="seg"><a href="#diagram-exec">Stakeholder</a><a class="on" href="#diagram">Production</a><a href="#diagram-dev">Dev / staging</a></div></div>
+  <svg class="map" style="height:800px" viewBox="0 0 1460 1140" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MAIA architecture diagram">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#52525b"/></marker>
+    </defs>
+    <path class="region" d="M382 196 H1418 Q1440 196 1440 218 V622 Q1440 644 1418 644 H628 V953 Q628 975 606 975 H382 Q360 975 360 953 V218 Q360 196 382 196 Z"/>
+    <text class="cap" x="378" y="962">Prophet AWS</text>
+
+    <!-- swim lanes -->
+    <line class="sep" x1="16" y1="180" x2="1444" y2="180"/>
+    <line class="sep" x1="16" y1="440" x2="1444" y2="440"/>
+    <line class="sep" x1="16" y1="760" x2="1444" y2="760"/>
+    <text class="lane" transform="translate(40 90) rotate(-90)">User</text>
+    <text class="lane" transform="translate(40 310) rotate(-90)">Application</text>
+    <text class="lane" transform="translate(40 600) rotate(-90)">Server apps · APIs and MCPs</text>
+    <text class="lane" transform="translate(40 940) rotate(-90)">Data</text>
+
+    <!-- lines -->
+    <path class="ln" d="M500 86 H210 V286" marker-end="url(#ah)"/>
+    <path class="ln" d="M615 122 V286" marker-end="url(#ah)"/>
+    <path class="ln" d="M1270 122 V286" marker-end="url(#ah)"/>
+    <path class="ln dash" d="M730 86 H1148 V286" marker-end="url(#ah)"/>
+    <path class="ln dash" d="M730 332 H1126" marker-end="url(#ah)"/>
+    <path class="ln dot" d="M1260 540 V460 H1160 A10 10 0 0 0 1140 460 H760 V356 H734" marker-end="url(#ah)"/>
+    <path class="ln" d="M1150 540 V378" marker-end="url(#ah)"/>
+    <path class="ln" d="M560 540 V378" marker-end="url(#ah)"/>
+    <path class="ln dash" d="M380 560 H290 V378" marker-end="url(#ah)"/>
+    <path class="ln" d="M720 540 V378" marker-end="url(#ah)"/>
+    <path class="ln" d="M880 540 V505 H1040 V536" marker-end="url(#ah)"/>
+    <path class="ln dash" d="M650 374 V790 H720 V816" marker-end="url(#ah)"/>
+    <path class="ln" d="M495 820 V628" marker-end="url(#ah)"/>
+    <path class="ln" d="M790 820 V628" marker-end="url(#ah)"/>
+    <path class="ln dash" d="M760 904 V935 H560 V908" marker-end="url(#ah)"/>
+    <path class="ln" d="M1080 820 V628" marker-end="url(#ah)"/>
+    <path class="ln" d="M1080 660 H880 V628" marker-end="url(#ah)"/>
+    <path class="ln" d="M1210 730 H1115 V628" marker-end="url(#ah)"/>
+    <path class="ln dash" d="M1315 624 V660" marker-end="url(#ah)"/>
+    <path class="ln" d="M1100 904 V1090 H340 V600 H376" marker-end="url(#ah)"/>
+    <path class="ln" d="M340 1090 H210 V378" marker-end="url(#ah)"/>
+    <path class="ln" d="M130 374 V1115 H1150 V908" marker-end="url(#ah)"/>
+    <path class="ln" d="M910 1022 H945 V690 H840 V628" marker-end="url(#ah)"/>
+
+    <!-- line labels (chip backgrounds added by script) -->
+    <g id="lbls">
+      <text class="lbl" x="355" y="86">Power users only</text>
+      <text class="lbl" x="615" y="240">Daily driver, everyone</text>
+      <text class="lbl" x="1270" y="240">Use agents, web apps</text>
+      <text class="lbl" x="939" y="86">Client tenant setup</text>
+      <text class="lbl" x="928" y="332">Multi-tenant architecture</text>
+      <text class="lbl" x="960" y="460">Connected when we want it</text>
+      <text class="lbl" x="1150" y="410">Web apps</text>
+      <text class="lbl" x="960" y="505">Data via MCP</text>
+      <text class="lbl" x="560" y="490">Prophet knowledge</text>
+      <text class="lbl" x="290" y="490">Prophet knowledge</text>
+      <text class="lbl" x="720" y="505">Skills and MCP</text>
+      <text class="lbl" x="650" y="700">Usage events</text>
+      <text class="lbl" x="495" y="720">Graph + documents</text>
+      <text class="lbl" x="790" y="720">Prophet data</text>
+      <text class="lbl" x="980" y="660">Deploys</text>
+      <text class="lbl" x="1080" y="790">Deploys apps and MCP servers</text>
+      <text class="lbl" x="1163" y="730">Backend</text>
+      <text class="lbl" x="1315" y="644">Agent authoring</text>
+      <text class="lbl" x="660" y="935">Structured entities</text>
+      <text class="lbl" x="340" y="720">Deploys</text>
+      <text class="lbl" x="210" y="720">Skills and MCP</text>
+      <text class="lbl" x="550" y="1115">Code and agents</text>
+      <text class="lbl" x="945" y="942">Client data (per-client warehouse)</text>
+    </g>
+
+    <!-- boxes -->
+    <a href="#users" class="node dark"><title>Open: Prophet internal users</title><rect class="box" x="500" y="50" width="230" height="72" rx="12"/><text class="t" x="615" y="82">Prophet internal users</text><text class="hint" x="615" y="104">Click to open ›</text></a>
+    <a href="#clients" class="node dark"><title>Open: Clients</title><rect class="box" x="1160" y="50" width="220" height="72" rx="12"/><text class="t" x="1270" y="82">Clients</text><text class="hint" x="1270" y="104">Click to open ›</text></a>
+    <a href="#claude" class="node"><title>Open: Claude</title><rect class="box" x="100" y="290" width="220" height="84" rx="12"/><text class="own" x="308" y="306">Anthropic</text><text class="t" x="210" y="322">Claude</text><text class="s" x="210" y="342">AI power users, Claude Code</text><text class="hint" x="210" y="361">Click to open ›</text></a>
+    <a href="#cowork" class="node hl"><title>Open: MAIA Cowork</title><rect class="box" x="500" y="290" width="230" height="84" rx="12"/><text class="own" x="718" y="306">Lyzr</text><text class="t" x="615" y="322">MAIA Cowork</text><text class="s" x="615" y="342">Open Cowork, white labeled</text><text class="hint" x="615" y="361">Click to open ›</text></a>
+    <a href="#external" class="node vi"><title>Open: Client MAIA</title><rect class="box" x="1130" y="290" width="210" height="84" rx="12"/><text class="own" x="1328" y="306">Lyzr</text><text class="t" x="1235" y="322">Client MAIA</text><text class="s" x="1235" y="342">Client spaces, own domain</text><text class="hint" x="1235" y="361">Click to open ›</text></a>
+    <a href="#mcp" class="node"><title>Open: Knowledge base MCP</title><rect class="box" x="380" y="540" width="230" height="84" rx="12"/><text class="own" x="598" y="556">Foundry</text><text class="t" x="495" y="572">Knowledge base MCP</text><text class="s sm" x="495" y="592">kg.search · kg.related · kg.get_document</text><text class="hint" x="495" y="611">Click to open ›</text></a>
+    <a href="#mcp" class="node"><title>Open: Data MCP servers</title><rect class="box" x="680" y="540" width="250" height="84" rx="12"/><text class="own" x="918" y="556">Foundry</text><text class="t" x="805" y="572">Data MCP servers</text><text class="s sm" x="805" y="592">Snowflake · client warehouse · design system</text><text class="hint" x="805" y="611">Click to open ›</text></a>
+    <a href="#architect" class="node"><title>Open: Architect</title><rect class="box" x="980" y="540" width="190" height="84" rx="12"/><text class="own" x="1158" y="556">Lyzr</text><text class="t" x="1075" y="572">Architect</text><text class="s" x="1075" y="592">Deployment pipeline</text><text class="hint" x="1075" y="611">Click to open ›</text></a>
+    <a href="#studio" class="node dsh"><title>Open: Studio</title><rect class="box" x="1210" y="540" width="210" height="84" rx="12"/><text class="own" x="1408" y="556">Lyzr</text><text class="t" x="1315" y="572">Studio</text><text class="s sm" x="1315" y="592">Agent backend; UI on request</text><text class="hint" x="1315" y="611">Click to open ›</text></a>
+    <a href="#lyzr" class="node"><title>Open: Lyzr API</title><rect class="box" x="1210" y="664" width="210" height="84" rx="12"/><text class="own" x="1408" y="680">Lyzr</text><text class="t" x="1315" y="696">Lyzr API</text><text class="s" x="1315" y="716">Backend for each web app</text><text class="hint" x="1315" y="735">Click to open ›</text></a>
+    <a href="#knowledge" class="node kg"><title>Open: Prophet knowledge base</title><rect class="box" x="380" y="820" width="230" height="84" rx="12"/><text class="own" x="598" y="836">Foundry</text><text class="t" x="495" y="852">Prophet knowledge base</text><text class="s sm" x="495" y="872">AWS Neptune graph + S3 documents</text><text class="hint" x="495" y="891">Click to open ›</text></a>
+    <a href="#snowflake" class="node sf"><title>Open: Snowflake</title><rect class="box" x="680" y="820" width="230" height="84" rx="12"/><text class="own" x="898" y="836">IT</text><text class="t" x="795" y="852">Snowflake</text><text class="s sm" x="795" y="872">Prophet's data: usage first, corporate later</text><text class="hint" x="795" y="891">Click to open ›</text></a>
+    <a href="#github" class="node"><title>Open: GitHub</title><rect class="box" x="990" y="820" width="220" height="84" rx="12"/><text class="own" x="1198" y="836">Foundry</text><text class="t" x="1100" y="852">GitHub</text><text class="s sm" x="1100" y="872">Code, agents, skills, MCP, data access</text><text class="hint" x="1100" y="891">Click to open ›</text></a>
+    <a href="#clientdata" class="node sf"><title>Open: Client data</title><rect class="box" x="680" y="980" width="230" height="84" rx="12"/><text class="own" x="898" y="996">Client</text><text class="t" x="795" y="1012">Client data</text><text class="s sm" x="795" y="1032">Client systems, outside Prophet's AWS</text><text class="hint" x="795" y="1051">Click to open ›</text></a>
+  </svg>
+  <div class="legend">
+    <span><svg viewBox="0 0 34 10"><path d="M1 5h32" stroke="#52525b" stroke-width="1.6"/></svg>Flow</span>
+    <span><svg viewBox="0 0 34 10"><path d="M1 5h32" stroke="#52525b" stroke-width="1.6" stroke-dasharray="7 5"/></svg>Occasional or setup</span>
+    <span><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="#52525b" stroke-width="2.2" stroke-dasharray=".5 6" stroke-linecap="round"/></svg>Only when we want it</span>
+    <span><i class="sw"></i>Inside Prophet's AWS</span>
+    <span><b class="own-s">Owner</b>Corner tag: who owns the box</span>
+  </div>
+</div></div></div>
+<div class="below">
+<div class="eyebrow">Open questions and asks</div>
+  <h1>Possible enhancements</h1>
+  <p class="lede">Things the prototype assumes that nobody has confirmed yet. Grouped by surface. Click an item to expand the context and what we need to ask.</p>
+
+  <h2 class="enh-h">MAIA Cowork</h2>
+  <details class="enh">
+    <summary><span class="tag decide">Decide</span><b>Delivery model: same image, our config, our extensions</b><span class="sub">How we get every Lyzr update while keeping the white label and our own enhancements. No skinning, no fork.</span></summary>
+    <div class="enh-body">
+      <p><b>Layer 1, white label is config.</b> Product name, logo, colour tokens, fonts, feature flags (no Beta badge, no Tweaks), model options, and a list of custom sidebar and Help links, all in a tenant config Lyzr reads. Prophet edits config, never CSS. If Cowork has no tenant config today, that is the first ask.</p>
+      <p><b>Layer 2, enhancements go upstream as generic features behind flags.</b> Multi-file skills, GitHub skill sync, request-access tiers, custom links, embedded apps in Agents Hub. Prophet specs them, Lyzr builds them into the product, Prophet turns the flag on. One codebase, parity by construction.</p>
+      <p><b>Layer 3, Prophet-specific pieces live outside Cowork behind standard interfaces.</b> MCP servers, skills repo, design system, Azure SSO via OIDC, usage events to Snowflake. Cowork supports the interface; Prophet owns what is on the other end.</p>
+      <p><b>Deployment.</b> Lyzr ships a versioned container image or Helm chart, the same one behind their SaaS. Prophet runs it in AWS with its config mounted. Upgrade = bump version + 15-minute smoke checklist (SSO, sidebar links, MCP connect, a skill runs, link-out opens). Monthly cadence, N-1 supported.</p>
+      <p><b>Contract points.</b></p>
+      <ul>
+        <li>No Prophet-specific code in Lyzr's repo and no Lyzr patches in ours. Everything Prophet needs is config, a flag, or an interface.</li>
+        <li>Config schema is stable or versioned, so an upgrade cannot silently drop our links or branding.</li>
+        <li>A shared backlog for Layer 2 asks, with what ships in which release.</li>
+      </ul>
+      <p><b>Why not skin their UI.</b> CSS overrides break the moment they rename a class or move the sidebar. Config-driven theming survives a refactor; overrides don't.</p>
+    </div>
+  </details>
+  <details class="enh">
+    <summary><span class="tag ask">Ask Lyzr</span><b>Embed Architect apps inside Cowork ("Open app")</b><span class="sub">New tab or embedded? Decides whether app use stays inside the Cowork experience.</span></summary>
+    <div class="enh-body">
+      <p><b>Where it shows up.</b> Agents Hub lists Architect apps (Presentation Studio, Market Sizing) with an "Open app" button. In the MAIA Agent Library today that button launches the app on its own URL in a new tab.</p>
+      <p><b>Why it matters.</b> The session set a goal of not pushing people to too many clicks outside Cowork. A new tab means leaving Cowork, an SSO bounce through Keycloak, and a separate window of work. Embedding keeps people in one place but raises its own problems.</p>
+      <p><b>What embedding needs.</b> Architect apps gate on Keycloak through SSOGuard. An embedded app has to accept the Cowork session as the user's identity, or the user logs in again inside the frame. Iframes also run into third-party cookie rules and the app's own frame-ancestors policy.</p>
+      <p><b>Questions to ask Lyzr.</b></p>
+      <ul>
+        <li>Can Cowork embed an external web app at all (iframe, side panel, or artifact-style pane)?</li>
+        <li>If yes, can it pass the signed-in user's identity to the app, or does the app re-authenticate?</li>
+        <li>If no, can "Open app" at least open in a new tab with SSO already satisfied, so there is no login prompt?</li>
+      </ul>
+      <p><b>Fallback if the answer is no.</b> Keep "Open app" as a new tab, make sure Keycloak and Azure sessions are shared so it opens without a prompt, and accept that apps live beside Cowork rather than inside it.</p>
+    </div>
+  </details>
+  <details class="enh">
+    <summary><span class="tag ask">Ask Lyzr</span><b>Request-access flow for restricted agents and skills</b><span class="sub">MAIA has endorsed / restricted / private with an approval step. Cowork has Mine / Shared / Company.</span></summary>
+    <div class="enh-body">
+      <p><b>Decision so far.</b> Prophet keeps control of endorsed agents and of who gets restricted ones. That tiering has to exist in Agents Hub and Skills, not only in the old Agent Library.</p>
+      <p><b>What Cowork has today.</b> Tabs for Mine, Shared with me and Company, plus Private and Built-in badges on skills. There is no restricted tier and no "Request access" action.</p>
+      <p><b>To ask.</b> Can a Company agent be marked restricted, with a request that routes to an approver, and can the same tiering apply to skills? Who in Prophet is the approver, and where do they see requests?</p>
+    </div>
+  </details>
+  <details class="enh">
+    <summary><span class="tag ask">Ask Lyzr</span><b>Multi-file skills and GitHub sync for skills</b><span class="sub">Cowork takes one markdown file per skill. Prophet skills are folders in GitHub.</span></summary>
+    <div class="enh-body">
+      <p><b>What we found in testing.</b> The Skills page only accepts a single markdown upload. Skills with supporting files, scripts, references or templates cannot be loaded as they are, so they get flattened or trimmed by hand.</p>
+      <p><b>Why it matters.</b> The diagram draws "Skills and MCP" as a live flow from GitHub into MAIA Cowork. Today that flow is a person copying markdown into the Skills page. When a skill changes in GitHub nobody updates the Cowork copy, and there is no way to tell which version a consultant is running. The skills repo is the thing that makes Prophet's work distinctive, so this is where drift hurts most.</p>
+      <p><b>What we would ask for.</b></p>
+      <ul>
+        <li>Multi-file skills: a folder or zip with SKILL.md plus supporting files, matching the Claude skill format Prophet already uses.</li>
+        <li>GitHub sync: point Company skills at a repo and branch, so a merge updates the skill in Cowork, with the version shown on the card.</li>
+        <li>A "Prophet endorsed" tab or badge driven by that repo, so endorsed skills are the synced ones and personal uploads stay separate.</li>
+      </ul>
+      <p><b>Fallback if the answer is no.</b> Keep a script in the skills repo that flattens each skill to one markdown file and a checklist for re-uploading on release. Slower, but at least versioned.</p>
+    </div>
+  </details>
+  <details class="enh">
+    <summary><span class="tag decide">Decide</span><b>Migration plan from today's MAIA to the hybrid model</b><span class="sub">Client MAIA stays on the existing platform and gets re-linked. Internal MAIA retires into Cowork. Nobody has sequenced it yet.</span></summary>
+    <div class="enh-body">
+      <p><b>See the full proposal:</b> <a href="#compat" style="color:var(--blue)">Backwards compatibility plan →</a></p>
+      <p><b>Decision so far.</b> Client MAIA is the existing MAIA platform, not a Cowork tenant. Clients keep the agent library they have today; Cowork links out to it from the bottom-left.</p>
+      <p><b>What moves.</b> Internal users: intranet link, General Chat history, favourites, feedback submissions, endorsed and restricted agents, Ask MAIA. Admin tools: UI Configuration, Dashboard and Eval Console live in the internal MAIA that goes away. Client orgs: untouched, but the Prophet strategists inside them now arrive from Cowork via SSO.</p>
+      <p><b>To decide.</b></p>
+      <ul>
+        <li>Cutover order: Cowork live for a pilot group first, or everyone at once with internal MAIA left read-only for a period?</li>
+        <li>Where the admin tools go when internal MAIA retires: keep a Prophet-only admin org on the MAIA platform, or ask Lyzr for equivalents in Cowork.</li>
+        <li>Which existing agents are re-pointed into Agents Hub, which stay client-only, and which are dropped.</li>
+        <li>Who tells users what to use during the overlap, and what the intranet link points at on day one.</li>
+      </ul>
+    </div>
+  </details>
+  <details class="enh">
+    <summary><span class="tag decide">Decide</span><b>Connector list and tool-approval policy (Foundry + IT)</b><span class="sub">Cowork runs connectors as the user, with their permissions, and offers "Automatically approve". Foundry and IT define what is allowed.</span></summary>
+    <div class="enh-body">
+      <p><b>Owner.</b> Foundry and IT together.</p>
+      <p><b>To define.</b> Which connectors are enabled at company level (Microsoft 365 and SharePoint are the likely first; GitHub for builders only?); whether "Automatically approve" is available to everyone, to power users, or locked to manual by admin policy; which actions are always-ask regardless of mode (send email, delete, push to main); a security review of Cowork's tool-use model, since the existing pen-test covered an app with no agents behind it.</p>
+      <p><b>To ask Lyzr.</b> Can admin policy pin the approval mode and set always-ask actions per connector, and are tool calls logged in a way IT can export?</p>
+    </div>
+  </details>
+  <h2 class="enh-h">Client MAIA (existing platform)</h2>
+  <details class="enh">
+    <summary><span class="tag ask">Ask Lyzr</span><b>Bake UI Configuration into client suborg creation</b><span class="sub">UI Configuration is only used for client sites. Branding and screen visibility could be part of creating the suborg instead of a separate admin page.</span></summary>
+    <div class="enh-body">
+      <p><b>Today.</b> UI Configuration is a page in internal MAIA: per session you pick a client name and logo and toggle Home, General Chat, Agent Library, Accelerator Network, Help and Dashboard, then publish. Internal MAIA is going away, so the page needs a new home or needs to disappear.</p>
+      <p><b>Proposal.</b> Make it a step of "Create client suborg": name, logo, which screens are on, who the Prophet admins are. One place, no separate publish step, nothing left behind in an internal MAIA that no longer exists.</p>
+      <p><b>To ask Lyzr.</b> Can suborg creation take branding and screen visibility as inputs, and can a Prophet admin edit them later from inside the client org rather than from a separate console?</p>
+    </div>
+  </details>
+  <details class="enh">
+    <summary><span class="tag decide">Decide</span><b>Retire the Dashboard; Eval Console is unproven</b><span class="sub">Dashboard (support, feedback, review requests) is replaced by Snowflake. Eval Console is net new and untested.</span></summary>
+    <div class="enh-body">
+      <p><b>Dashboard.</b> Decommission. Feedback and review requests become events in Snowflake alongside usage. Needs a replacement for the "Send feedback" action itself (in Cowork it sits in Help &amp; Info) and somewhere for a reviewer to see requests, even if that is a Snowflake view.</p>
+      <p><b>Eval Console.</b> Net new, not yet used. Decide whether it is worth keeping on the MAIA platform as an admin-only tool, or whether grading Cowork answers moves to a script that writes results to Snowflake.</p>
+    </div>
+  </details>
+  <details class="enh">
+    <summary><span class="tag ask">Ask Lyzr</span><b>Confirm "computed, not stored" for Lyzr API in writing</b><span class="sub">Lyzr API runs outside Prophet's AWS. The position is that client data is processed there but never stored. That needs to be true of logs, traces and upstream model providers too.</span></summary>
+    <div class="enh-body">
+      <p><b>Decision so far.</b> Acceptable for client data to be computed on Lyzr's servers because nothing is stored. The "client material in our AWS" principle covers storage, not processing.</p>
+      <p><b>To confirm with Lyzr.</b> Request and response logging and how long it is kept; tracing or evaluation captures; whether prompts reach Anthropic, Google or OpenAI with zero-retention terms; region where Lyzr API runs; what the pen-test covered for apps that do have agents behind them.</p>
+      <p><b>Why.</b> This is the sentence a client will ask Prophet to put in a contract: "Your data does not leave Prophet's environment except for transient processing, and is not retained."</p>
+    </div>
+  </details>
+  <h2 class="enh-h">Snowflake and data</h2>
+  <details class="enh">
+    <summary><span class="tag decide">Decide</span><b>Client data goes only into its own warehouse</b><span class="sub">Per-client Snowflake databases, membership-gated, instead of a blanket ban. Replaces the earlier 'never enters Snowflake' rule.</span></summary>
+    <div class="enh-body">
+      <p><b>Why it matters.</b> Client material is covered by client agreements and by the rule that it stays per client. If it lands in Snowflake or the knowledge graph it can surface in another team's answer, and both stores fall into pen-test and audit scope for client data.</p>
+      <p><b>Proposal.</b></p>
+      <ul>
+        <li>A written rule: client data only enters its own warehouse, a per-client Snowflake database (CLIENT_LARKFIELD, CLIENT_NORTHWIND …), never the Prophet warehouse or the knowledge graph.</li>
+        <li>Access through the Client warehouse MCP only: gated on membership of that client's org or the Architect app running for that client, one credential per client in AWS Secrets Manager. Prophet-wide roles do not grant access.</li>
+        <li>Architect apps can still query client systems at run time; <code>cw.sync</code> is the only path that copies data, and only into that client's warehouse.</li>
+      </ul>
+      <p><b>What to decide.</b> Who enforces the rule, and how we audit that it holds.</p>
+    </div>
+  </details>
+  <details class="enh">
+    <summary><span class="tag decide">Decide</span><b>Per-user access or one service account for Snowflake and the knowledge graph</b><span class="sub">Cowork runs as the user. The MCP servers may not.</span></summary>
+    <div class="enh-body">
+      <p><b>Decision so far.</b> Prophet owns the MCP servers. Identity is not settled, but IT will most likely route it through the existing Keycloak and Azure setup rather than anything new.</p>
+      <p><b>Risk.</b> If the MCP servers connect with one service account, every user effectively sees everything that account can see, whatever their own access is.</p>
+      <p><b>What per-user needs.</b> The user's identity has to pass from Azure through Cowork to the MCP server, and the MCP server has to query Snowflake and the knowledge graph as that user or apply their permissions itself.</p>
+      <p><b>What to decide.</b> Per-user or service account for launch, and if a service account, what it is allowed to read and who signs off.</p>
+    </div>
+  </details>
+  <details class="enh">
+    <summary><span class="tag ask">Ask IT</span><b>Security review for Snowflake outside AWS</b><span class="sub">Snowflake may live outside Prophet's AWS. IT asked how to orient around data security for it.</span></summary>
+    <div class="enh-body">
+      <p><b>Network path.</b> Calls go from Cowork and the MCP servers in Prophet's AWS to Snowflake. We need to know whether that path leaves AWS and over what.</p>
+      <p><b>Encryption and private link.</b> Confirm encryption in transit and at rest, and whether a private link is available so traffic does not cross the public internet.</p>
+      <p><b>What IT needs from Foundry.</b> A list of the MCP servers that connect, what each one reads, and how they authenticate.</p>
+      <p><b>Timing.</b> The review needs to land before usage data from ClickHouse goes in, since that is first on IT's plan.</p>
+    </div>
+  </details>
+</div>
+</section>
+
+<section class="screen" id="s-diagram-dev">
+<div class="stage"><div class="scaler"><div class="frame dg">
+  <div class="dg-head"><h1>Dev / staging architecture</h1><p>Same shape as production, with today's dev hosts. Click any box to see that surface.</p><div class="seg"><a href="#diagram-exec">Stakeholder</a><a href="#diagram">Production</a><a class="on" href="#diagram-dev">Dev / staging</a></div></div>
+  <svg class="map" viewBox="0 0 1440 820" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MAIA dev and staging architecture diagram">
+    <defs>
+      <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#52525b"/></marker>
+    </defs>
+    <rect class="region" x="360" y="196" width="1070" height="618" rx="22"/>
+    <text class="cap" x="384" y="800">Prophet AWS dev, GitHub, Snowflake dev</text>
+
+    <!-- swim lanes -->
+    <line class="sep" x1="16" y1="180" x2="1390" y2="180"/>
+    <line class="sep" x1="16" y1="460" x2="1390" y2="460"/>
+    <text class="lane" transform="translate(40 90) rotate(-90)">User</text>
+    <text class="lane" transform="translate(40 320) rotate(-90)">Application</text>
+    <text class="lane" transform="translate(40 640) rotate(-90)">Backend</text>
+
+    <!-- lines -->
+    <path class="ln" d="M500 86 H210 V286" marker-end="url(#ah2)"/>
+    <path class="ln" d="M615 122 V286" marker-end="url(#ah2)"/>
+    <path class="ln dash" d="M730 86 H1160 V286" marker-end="url(#ah2)"/>
+    <path class="ln" d="M1270 122 V286" marker-end="url(#ah2)"/>
+    <path class="ln dash" d="M730 332 H1126" marker-end="url(#ah2)"/>
+    <path class="ln" d="M560 540 V378" marker-end="url(#ah2)"/>
+    <path class="ln" d="M650 690 V378" marker-end="url(#ah2)"/>
+    <path class="ln dot" d="M915 540 V500 H700 V378" marker-end="url(#ah2)"/>
+    <path class="ln dash" d="M370 582 H295 V378" marker-end="url(#ah2)"/>
+    <path class="ln" d="M420 705 H210 V378" marker-end="url(#ah2)"/>
+    <path class="ln" d="M130 374 V760 H416" marker-end="url(#ah2)"/>
+    <path class="ln" d="M680 732 H796" marker-end="url(#ah2)"/>
+    <path class="ln" d="M1160 732 H1034" marker-end="url(#ah2)"/>
+    <path class="ln" d="M915 774 V798 H1392 V332 H1346" marker-end="url(#ah2)"/>
+    <path class="ln dash" d="M1030 582 H1265 V686" marker-end="url(#ah2)"/>
+
+    <!-- line labels (chip backgrounds added by script) -->
+    <g id="lbls2">
+      <text class="lbl" x="355" y="86">Build and test</text>
+      <text class="lbl" x="615" y="236">UAT</text>
+      <text class="lbl" x="945" y="86">Test suborg setup</text>
+      <text class="lbl" x="1270" y="236">UAT agents, web apps</text>
+      <text class="lbl" x="928" y="332">Link out, bottom left</text>
+      <text class="lbl" x="560" y="420">Prophet knowledge</text>
+      <text class="lbl" x="650" y="657">Skills and MCP</text>
+      <text class="lbl" x="808" y="500">Connected when we want it</text>
+      <text class="lbl" x="295" y="500">Prophet knowledge</text>
+      <text class="lbl" x="330" y="705">Skills and MCP</text>
+      <text class="lbl" x="290" y="760">Code and agents</text>
+      <text class="lbl" x="738" y="732">To dev</text>
+      <text class="lbl" x="1097" y="732">Backend</text>
+      <text class="lbl" x="1392" y="560">Web apps</text>
+      <text class="lbl" x="1150" y="582">Agent authoring</text>
+    </g>
+
+    <!-- boxes -->
+    <a href="#users" class="node dark"><title>Open: Prophet internal users</title><rect class="box" x="500" y="50" width="230" height="72" rx="12"/><text class="t" x="615" y="82">Builders and UAT testers</text><text class="hint" x="615" y="104">Click to open ›</text></a>
+    <a href="#clients" class="node dark"><title>Open: Clients</title><rect class="box" x="1180" y="50" width="180" height="72" rx="12"/><text class="t" x="1270" y="82">Test client org</text><text class="hint" x="1270" y="104">Click to open ›</text></a>
+    <a href="#claude" class="node"><title>Open: Claude</title><rect class="box" x="100" y="290" width="220" height="84" rx="12"/><text class="t" x="210" y="322">Claude</text><text class="s" x="210" y="342">Claude Code, feature branches</text><text class="hint" x="210" y="361">Click to open ›</text></a>
+    <a href="#cowork" class="node hl warn"><title>Open: MAIA Cowork</title><rect class="box" x="500" y="290" width="230" height="84" rx="12"/><text class="t" x="615" y="322">MAIA Cowork</text><text class="s" x="615" y="342">Lyzr-hosted today, not in our AWS</text><text class="hint" x="615" y="361">Click to open ›</text></a>
+    <a href="#external" class="node vi"><title>Open: External MAIA</title><rect class="box" x="1130" y="290" width="210" height="84" rx="12"/><text class="t" x="1235" y="322">External MAIA</text><text class="s" x="1235" y="342">Dev host, test sub-org</text><text class="hint" x="1235" y="361">Click to open ›</text></a>
+    <a href="#snowflake" class="node sf"><title>Open: Snowflake</title><rect class="box" x="370" y="540" width="240" height="84" rx="12"/><text class="t" x="490" y="572">Snowflake</text><text class="s" x="490" y="592">Dev schema, sample data</text><text class="hint" x="490" y="611">Click to open ›</text></a>
+    <a href="#studio" class="node dsh"><title>Open: Studio</title><rect class="box" x="800" y="540" width="230" height="84" rx="12"/><text class="t" x="915" y="572">Studio</text><text class="s" x="915" y="592">studio.dev.maia.prophet.com</text><text class="hint" x="915" y="611">Click to open ›</text></a>
+    <a href="#github" class="node"><title>Open: GitHub</title><rect class="box" x="420" y="690" width="260" height="84" rx="12"/><text class="t" x="550" y="722">GitHub</text><text class="s" x="550" y="742">Feature branches, PR into dev</text><text class="hint" x="550" y="761">Click to open ›</text></a>
+    <a href="#architect" class="node"><title>Open: Architect</title><rect class="box" x="800" y="690" width="230" height="84" rx="12"/><text class="t" x="915" y="722">Architect</text><text class="s" x="915" y="742">Dev target, promote to prod</text><text class="hint" x="915" y="761">Click to open ›</text></a>
+    <a href="#lyzr" class="node"><title>Open: Lyzr API</title><rect class="box" x="1160" y="690" width="210" height="84" rx="12"/><text class="t" x="1265" y="722">Lyzr API</text><text class="s" x="1265" y="742">Dev workspace, lyzr-dev realm</text><text class="hint" x="1265" y="761">Click to open ›</text></a>
+  </svg>
+  <div class="legend">
+    <span><svg viewBox="0 0 34 10"><path d="M1 5h32" stroke="#52525b" stroke-width="1.6"/></svg>Flow</span>
+    <span><svg viewBox="0 0 34 10"><path d="M1 5h32" stroke="#52525b" stroke-width="1.6" stroke-dasharray="7 5"/></svg>Occasional or setup</span>
+    <span><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="#52525b" stroke-width="2.2" stroke-dasharray=".5 6" stroke-linecap="round"/></svg>Only when we want it</span>
+    <span><i class="sw"></i>Inside Prophet's AWS, GitHub and Snowflake</span>
+  </div>
+</div></div></div>
+</section>
+
+<section class="screen" id="s-diagram-exec">
+<div class="stage"><div class="scaler"><div class="frame dg">
+  <div class="dg-head"><h1>MAIA, in one picture</h1><p>Click a box to go deeper.</p><div class="seg"><a class="on" href="#diagram-exec">Stakeholder</a><a href="#diagram">Production</a><a href="#diagram-dev">Dev / staging</a></div></div>
+  <svg class="map xmap" style="height:760px" viewBox="0 0 1440 760" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MAIA in one picture: Prophet teams and clients use MAIA Cowork and Client MAIA, built on knowledge and data, an agent backend, and a Lyzr platform Prophet owns the data for">
+    <!-- connectors -->
+    <line class="xdl" x1="395" y1="156" x2="395" y2="230"/><circle class="xdot" cx="395" cy="156" r="3.5"/><circle class="xdot" cx="395" cy="230" r="3.5"/><line class="xdl" x1="1045" y1="156" x2="1045" y2="230"/><circle class="xdot" cx="1045" cy="156" r="3.5"/><circle class="xdot" cx="1045" cy="230" r="3.5"/>
+    <line class="xdl" x1="270" y1="450" x2="270" y2="520"/><circle class="xdot" cx="270" cy="450" r="3.5"/><circle class="xdot" cx="270" cy="520" r="3.5"/><line class="xdl" x1="720" y1="450" x2="720" y2="520"/><circle class="xdot" cx="720" cy="450" r="3.5"/><circle class="xdot" cx="720" cy="520" r="3.5"/><line class="xdl" x1="1170" y1="450" x2="1170" y2="520"/><circle class="xdot" cx="1170" cy="450" r="3.5"/><circle class="xdot" cx="1170" cy="520" r="3.5"/>
+    <g id="lbls3"></g>
+    <!-- top row -->
+    <a href="#users" class="node"><title>Open: Prophet internal users</title><rect class="box xpill" x="230" y="60" width="330" height="96" rx="48"/><text class="xpt" x="395" y="116">Prophet Teams</text></a>
+    <a href="#clients" class="node"><title>Open: Clients</title><rect class="box xpill" x="880" y="60" width="330" height="96" rx="48"/><text class="xpt" x="1045" y="116">Clients</text></a>
+    <!-- band -->
+    <text class="xcap" x="720" y="214">AI INTERFACE · DEV · DEPLOYMENT</text>
+    <rect class="xband" x="60" y="230" width="1320" height="220" rx="18"/>
+    <line class="xlink" x1="664" y1="340" x2="776" y2="340"/><text class="xlk" x="720" y="330">linked</text>
+    <a href="#cowork" class="node"><title>Open: MAIA Cowork</title><rect class="box xsub xsub-hl" x="110" y="262" width="550" height="156" rx="14"/><text class="xst" x="385" y="334">MAIA Cowork</text><text class="xss" x="385" y="364">Everyday AI workspace for Prophet teams</text><text class="xh" x="640" y="406">Click to open ›</text></a>
+    <a href="#external" class="node"><title>Open: External MAIA</title><rect class="box xsub" x="780" y="262" width="550" height="156" rx="14"/><text class="xst" x="1055" y="334">Client MAIA</text><text class="xss" x="1055" y="364">Agents and apps for each client</text><text class="xh" x="1310" y="406">Click to open ›</text></a>
+    <!-- bottom row -->
+    <a href="#knowledge" class="node"><title>Open: Knowledge &amp; Data</title><rect class="box xb" x="60" y="520" width="420" height="230" rx="18"/><text class="xt" x="88" y="562">Knowledge &amp; Data</text><line class="xdiv" x1="88" y1="580" x2="452" y2="580"/><text class="xli" x="88" y="614">• Prophet Knowledge Base (Neptune + S3)</text><text class="xli" x="88" y="646">• Skills and methodologies</text><text class="xli" x="88" y="678">• Snowflake: usage, corporate data</text><text class="xli" x="88" y="710">• Client data in its own warehouse</text><text class="xh" x="460" y="738">Click to open ›</text></a>
+    <a href="#mcp" class="node"><title>Open: Agent Backend</title><rect class="box xb xred" x="510" y="520" width="420" height="230" rx="18"/><text class="xt" x="538" y="562">Agent Backend</text><line class="xdiv" x1="538" y1="580" x2="902" y2="580"/><text class="xli" x="538" y="614">• Studio / Lyzr API</text><text class="xli" x="538" y="646">• Prophet MCP servers</text><text class="xli" x="538" y="678">• Architect pipeline</text><text class="xli" x="538" y="710">• AI models: Anthropic, Google, OpenAI</text><text class="xh" x="910" y="738">Click to open ›</text><circle class="xbadge" cx="900" cy="552" r="20"/><text class="xbt" x="900" y="556">NEW</text></a>
+    <a href="#lyzr" class="node"><title>Open: Platform &amp; Ownership</title><rect class="box xb" x="960" y="520" width="420" height="230" rx="18"/><text class="xt" x="988" y="562">Platform &amp; Ownership</text><line class="xdiv" x1="988" y1="580" x2="1352" y2="580"/><text class="xli" x="988" y="614">• Software by Lyzr, white-labelled</text><text class="xli" x="988" y="646">• Hosted in Prophet AWS</text><text class="xli" x="988" y="678">• Prophet owns data, agents, knowledge</text><text class="xli" x="988" y="710">• Internal MAIA retires into Cowork</text><text class="xh" x="1360" y="738">Click to open ›</text></a>
+  </svg>
+</div></div></div>
+</section>
+
+
+<!-- ===== 2. MAIA Cowork (home / agents hub / skills) ===== -->
+<section class="screen" id="s-cowork">
+<div class="stage"><div class="scaler"><div class="frame" id="cw-frame">
+  <aside class="side">
+    <a class="brand" href="#cowork">
+      <img src="prophet-logo.png" alt="Prophet">
+      <svg class="wm" viewBox="0 0 103 30" xmlns="http://www.w3.org/2000/svg" aria-label="MAIA"><path transform="translate(-168.976, 0)" d="M168.976 29.568V3.05176e-05H171.12V29.568H168.976ZM184.771 24.832V1.95203H193.315L197.699 14.144L202.083 1.95203H210.467V24.832H203.939V10.592L198.339 24.832H196.163L190.627 10.592V24.832H184.771ZM213.135 24.832L220.463 1.95203H228.943L236.207 24.832H229.263L228.047 20.576H220.463L219.247 24.832H213.135ZM224.271 7.26403L221.743 16.064H226.767L224.271 7.26403ZM238.961 24.832V1.95203H245.585V24.832H238.961ZM248.291 24.832L255.619 1.95203H264.099L271.363 24.832H264.419L263.203 20.576H255.619L254.403 24.832H248.291ZM259.427 7.26403L256.899 16.064H261.923L259.427 7.26403Z" fill="#000"/></svg>
+      <span class="tag">V2</span>
+      <span class="tools"><span class="ib" title="Search (⌘K)"><svg class="i"><use href="#i-search"/></svg></span><span class="ib" title="Collapse sidebar"><svg class="i"><use href="#i-panel"/></svg></span></span>
+    </a>
+    <a class="newchat" href="#cowork"><svg class="i"><use href="#i-plus"/></svg>New chat</a>
+    <div class="scroll">
+      <nav class="nav">
+        <a href="#cowork-skills" data-nav="cowork-skills"><svg class="i"><use href="#i-star"/></svg>Skills</a>
+        <a><svg class="i"><use href="#i-folder"/></svg>Projects</a>
+        <a><svg class="i"><use href="#i-file"/></svg>Artifacts</a>
+        <a><svg class="i"><use href="#i-palette"/></svg>Design</a>
+        <a href="#cowork-agents" data-nav="cowork-agents"><svg class="i"><use href="#i-bot"/></svg>Agents Hub</a>
+        <a><svg class="i"><use href="#i-plug"/></svg>Connectors</a>
+      </nav>
+      <div class="sec">Projects</div>
+      <div class="nav">
+        <a><svg class="i"><use href="#i-folder"/></svg>UAT project</a>
+        <a><svg class="i"><use href="#i-folder"/></svg>Politics</a>
+      </div>
+      <div class="sec">Chats</div>
+      <div class="chat on">Larkfield customer survey plan</div>
+      <div class="chat">Q3 subscription results</div>
+      <div class="chat">Northwind kickoff brief</div>
+      <div class="chat">Brand architecture options for Halden</div>
+      <div class="chat">Exec summary: loyalty program audit</div>
+      <div class="chat">Competitor pricing scan, EU coffee</div>
+      <div class="chat">Interview guide for store managers</div>
+      <div class="chat">Steering committee deck outline</div>
+    </div>
+    <div class="links">
+      <a class="row ext" href="#external-orgs"><svg class="i"><use href="#i-globe"/></svg><span class="t">External MAIA<small>client spaces</small></span><svg class="i arrow"><use href="#i-out"/></svg></a>
+      <hr>
+      <div class="row org"><span><svg class="i"><use href="#i-org"/></svg>Prophet's Org</span><svg class="i" style="width:14px;height:14px"><use href="#i-down"/></svg></div>
+      <div class="user"><div class="av">BP</div><div class="who"><b>Bhavya Patel</b><span>bpatel@prophet.com</span></div><span class="ib"><svg class="i"><use href="#i-dots"/></svg></span></div>
+    </div>
+  </aside>
+
+  <!-- Home -->
+  <main class="main" data-pane="cowork">
+    <div class="crumbs">Projects <svg class="i chev"><use href="#i-right"/></svg><b>Larkfield Coffee</b><span class="help-btn help-open" title="Help &amp; Info"><svg class="i"><use href="#i-help"/></svg>Help</span></div>
+    <div class="content">
+      <h2 class="greet"><b>Good afternoon, Bhavya</b><span>What are we working on?</span></h2>
+      <div class="envrow"><span class="chip"><span class="dot"></span>Cloud<svg class="i"><use href="#i-down"/></svg></span></div>
+      <div class="composer">
+        <div class="ph">Summarize this week's client feedback into three themes…</div>
+        <div class="tb">
+          <span class="ib" title="Add"><svg class="i"><use href="#i-plus"/></svg></span>
+          <span class="ib" title="Approval mode"><svg class="i"><use href="#i-shield"/></svg></span>
+          <span class="chip ds"><span class="sq"></span>Prophet</span>
+          <span class="grow"></span>
+          <span class="chip">Model: Auto<svg class="i"><use href="#i-down"/></svg></span>
+          <button class="send" title="Send"><svg class="i"><use href="#i-up"/></svg></button>
+        </div>
+      </div>
+      <div class="sugg">
+        <div class="lbl">Suggested</div>
+        <a class="srow" href="#cowork-skills"><svg class="i"><use href="#i-star"/></svg><div class="tx"><b>Start from a Prophet skill</b><span>Slides, exec summary, document review</span></div><span class="rt">Skills</span></a>
+        <a class="srow" href="#cowork-agents"><svg class="i"><use href="#i-bot"/></svg><div class="tx"><b>Use an endorsed agent</b><span>Presentation Studio, Market Sizing, Ask MAIA</span></div><span class="rt">Agents Hub</span></a>
+        <div class="srow"><svg class="i"><use href="#i-upload"/></svg><div class="tx"><b>Chat with a document</b><span>Upload a PDF, Word doc or spreadsheet</span></div><span class="rt">Upload</span></div>
+        <a class="srow" href="#external-orgs"><svg class="i"><use href="#i-globe"/></svg><div class="tx"><b>Open a client space</b><span>Jump to External MAIA for client work</span></div><span class="rt">External MAIA</span></a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Agents Hub -->
+  <main class="main" data-pane="cowork-agents" hidden>
+    <div class="crumbs"><b>Agents Hub</b><span class="help-btn help-open" title="Help &amp; Info"><svg class="i"><use href="#i-help"/></svg>Help</span></div>
+    <div class="hub">
+      <div class="hub-h"><h2>Agents Hub</h2><span class="btn"><svg class="i"><use href="#i-plus"/></svg>New agent</span></div>
+      <p class="sub">Endorsed agents, agents shared with you, and Architect apps, all in one place. Replaces the MAIA Agent Library.</p>
+      <div class="bar">
+        <div class="tabs"><span class="on">All <em>5</em></span><span>Endorsed <em>4</em></span><span>Mine <em>1</em></span><span>Shared <em>2</em></span><span>Architect apps <em>2</em></span></div>
+        <div class="search"><svg class="i"><use href="#i-search"/></svg>Search agents, apps and skills</div>
+      </div>
+      <div class="grid">
+        <div class="card"><div class="hd"><span class="ic app"><svg class="i"><use href="#i-layers"/></svg></span><h3>Presentation Studio<small>Dean Dowling</small></h3></div><p>Turn raw material into Prophet-branded slides. Confirm the story, the content, then rehearse.</p><div class="flows"><span class="badge app">Architect app</span><span class="badge end">Endorsed</span></div><div class="ft"><span class="stars">★★★★★</span>11 queries<a class="btn" href="#architect"><svg class="i"><use href="#i-out"/></svg>Open app</a></div></div>
+        <div class="card"><div class="hd"><span class="ic app"><svg class="i"><use href="#i-chart"/></svg></span><h3>Market Sizing<small>Daniel Chen</small></h3></div><p>Top-down and bottom-up market sizing with sources, assumptions and a sensitivity table.</p><div class="flows"><span class="badge app">Architect app</span><span class="badge end">Endorsed</span></div><div class="ft"><span class="stars">★★★★★</span>8 queries<a class="btn" href="#architect"><svg class="i"><use href="#i-out"/></svg>Open app</a></div></div>
+        <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-msg"/></svg></span><h3>Ask MAIA<small>MAIA team</small></h3></div><p>Questions about MAIA, Prophet's AI tools and how to get access to agents and apps.</p><div class="flows"><span class="badge">Agent</span><span class="badge end">Endorsed</span></div><div class="ft"><span class="stars">★★★★<s>★</s></span>158 queries<span class="btn ghost">Use<svg class="i"><use href="#i-arrow"/></svg></span></div></div>
+        <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-search"/></svg></span><h3>Research analyst<small>Shared with you</small></h3></div><p>Researches a company, market or topic and writes a short, cited brief with what matters and why.</p><div class="flows"><span class="badge">Agent</span><span class="badge end">Endorsed</span></div><div class="ft"><span class="stars">★★★★<s>★</s></span>42 queries<span class="btn ghost">Use<svg class="i"><use href="#i-arrow"/></svg></span></div></div>
+        <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-pen"/></svg></span><h3>Writing Studio<small>Created by you</small></h3></div><p>Drafts and edits in Prophet's voice: briefs, emails, exec summaries and client-ready copy.</p><div class="flows"><span class="badge">Agent</span><span class="badge">Private</span></div><div class="ft"><span class="stars">★★★★<s>★</s></span>23 queries<span class="btn ghost">Use<svg class="i"><use href="#i-arrow"/></svg></span></div></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Skills -->
+  <main class="main" data-pane="cowork-skills" hidden>
+    <div class="crumbs"><b>Skills</b><span class="help-btn help-open" title="Help &amp; Info"><svg class="i"><use href="#i-help"/></svg>Help</span></div>
+    <div class="hub">
+      <div class="hub-h"><h2>Skills</h2><span class="btn"><svg class="i"><use href="#i-plus"/></svg>New skill</span></div>
+      <p class="sub">Reusable instructions Cowork applies to a chat. Prophet-endorsed skills come from the skills repo on GitHub.</p>
+      <div class="bar">
+        <div class="tabs"><span class="on">All <em>5</em></span><span>Prophet endorsed <em>4</em></span><span>Mine <em>1</em></span><span>Built in <em>12</em></span></div>
+        <div class="search"><svg class="i"><use href="#i-search"/></svg>Search skills</div>
+      </div>
+      <div class="grid">
+        <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-layers"/></svg></span><h3>Slides &amp; exec summaries<small>Prophet skills repo</small></h3></div><p>Builds decks and one-page summaries on the Prophet design system, story first.</p><div class="ft"><span class="badge end">Endorsed</span>Updated 2 days ago<span class="btn ghost">Use</span></div></div>
+        <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-file"/></svg></span><h3>Document review<small>Prophet skills repo</small></h3></div><p>Reviews a draft for argument, structure and tone, with tracked suggestions.</p><div class="ft"><span class="badge end">Endorsed</span>Updated last week<span class="btn ghost">Use</span></div></div>
+        <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-search"/></svg></span><h3>Research &amp; comparisons<small>Prophet skills repo</small></h3></div><p>Structured competitor and option comparisons with sources and a clear verdict.</p><div class="ft"><span class="badge end">Endorsed</span>Updated last week<span class="btn ghost">Use</span></div></div>
+        <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-chart"/></svg></span><h3>Data &amp; numerical analysis<small>Prophet skills repo</small></h3></div><p>Cleans survey and sales data, runs the numbers and explains what changed.</p><div class="ft"><span class="badge end">Endorsed</span>Updated 3 weeks ago<span class="btn ghost">Use</span></div></div>
+        <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-cal"/></svg></span><h3>Meeting recap<small>Created by you</small></h3></div><p>Turns a transcript into decisions, owners and next steps for the client team.</p><div class="ft"><span class="badge">Private</span>Updated yesterday<span class="btn ghost">Use</span></div></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Help & Info drawer -->
+  <div class="scrim" id="help-scrim"></div>
+  <aside class="drawer" aria-label="Help and info">
+    <div class="dh"><h3>Help &amp; Info</h3><span class="ib" id="help-close" title="Close"><svg class="i"><use href="#i-x"/></svg></span></div>
+    <div class="ditem"><span class="ic"><svg class="i"><use href="#i-help"/></svg></span><div><b>Help / Support</b><span>Guides, FAQs and a ticket to the MAIA support team.</span></div></div>
+    <div class="ditem"><span class="ic"><svg class="i"><use href="#i-msg"/></svg></span><div><b>Ask MAIA</b><span>Ask how to use agents, skills and Architect apps.</span></div></div>
+    <div class="ditem acc"><span class="ic"><svg class="i"><use href="#i-net"/></svg></span><div><b>Accelerator Network</b><span>Find partners that help Prophet teams ship best-in-class AI.</span></div></div>
+    <div class="ditem"><span class="ic"><svg class="i"><use href="#i-pen"/></svg></span><div><b>Send feedback</b><span>Tell us what works and what doesn't in MAIA Cowork.</span></div></div>
+  </aside>
+</div></div></div>
+</section>
+
+<!-- ===== 3. External MAIA ===== -->
+<section class="screen" id="s-external">
+<style>
+  #s-external .frame{flex-direction:row;font-family:Inter,system-ui,sans-serif;color:#0a0a0a;background:#fff}
+  #s-external .xl-rail{width:330px;flex:none;border-right:1px solid #ebebeb;display:flex;flex-direction:column;background:#fff}
+  #s-external .xl-top{display:flex;justify-content:space-between;align-items:center;padding:28px 28px 0 40px}
+  #s-external .xl-top img{width:24px;height:24px}
+  #s-external .xl-top svg.i{width:22px;height:22px;color:#6b7280}
+  #s-external .xl-grow{flex:1}
+  #s-external .xl-foot{border-top:1px solid #ebebeb;padding:6px 0 14px}
+  #s-external .xl-row{display:flex;align-items:center;gap:14px;height:64px;padding:0 28px 0 40px;font-size:16px;color:#0a0a0a}
+  #s-external .xl-row svg.i{width:22px;height:22px}
+  #s-external .xl-row .chev{margin-left:auto;width:18px;height:18px;color:#6b7280}
+  #s-external a.xl-row:hover{background:#f7f7f8}
+  #s-external .xl-user .who b{display:block;font-weight:600}
+  #s-external .xl-user .who span{display:block;font-size:14px;color:#6b7280;margin-top:2px}
+  #s-external .xl-main{flex:1;min-width:0;padding:36px 56px 0 84px;overflow:hidden}
+  #s-external .xl-back{display:inline-block;font-size:13px;color:#6b7280;margin-bottom:12px}
+  #s-external .xl-back:hover{color:rgb(20,124,255)}
+  #s-external .xl-head{display:flex;align-items:center;gap:18px;height:30px}
+  #s-external .xl-client{font-family:"Playfair Display",Georgia,serif;font-size:30px;line-height:1;color:#1f4d3a;letter-spacing:.12em;font-weight:600;font-variant:small-caps}
+  #s-external .xl-pipe{width:1px;height:30px;background:#0a0a0a}
+  #s-external .xl-head .wm{height:30px}
+  #s-external .xl-ver{font-size:12px;color:#6b7280;align-self:flex-end;margin-left:-8px}
+  #s-external .xl-nav{display:flex;align-items:center;gap:8px;margin-top:44px}
+  #s-external .xl-nav span{height:48px;display:inline-flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;padding:0 18px}
+  #s-external .xl-nav span.on{width:96px;padding:0;border-radius:999px;background:#0a0a0a;color:#fff}
+  #s-external .xl-banner{margin-top:32px;height:236px;border-radius:16px;background:linear-gradient(90deg,#22d3a8,#22d3ee,#2563eb);display:flex;align-items:center;padding:40px;box-sizing:border-box;max-width:1360px}
+  #s-external .xl-banner p{margin:0;color:#fff;font-weight:700;font-size:35px;line-height:1.24;letter-spacing:-.015em}
+  #s-external .xl-label{margin-top:28px}
+  #s-external .xl-label i{display:block;width:76px;height:3px;border-radius:2px;background:linear-gradient(90deg,#22d3a8,#22d3ee,#2563eb);margin-bottom:10px}
+  #s-external .xl-label span{font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;font-weight:600}
+  #s-external .xl-apps{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+  #s-external .xl-app{display:flex;align-items:center;gap:22px;border:1px solid #ebebeb;border-radius:16px;padding:18px 32px 18px 18px}
+  #s-external .xl-ico{width:72px;height:72px;border-radius:14px;background:#eef4ff;color:rgb(20,124,255);display:grid;place-items:center;flex:none}
+  #s-external .xl-ico svg.i{width:28px;height:28px}
+  #s-external .xl-app h4{margin:0;font-size:22px;font-weight:600;letter-spacing:-.01em}
+  #s-external .xl-app p{margin:4px 0 0;font-size:16px;color:#6b7280}
+  #s-external .xl-open{margin-left:auto;display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 20px;border-radius:999px;background:rgb(20,124,255);color:#fff;font-size:15px;font-weight:600;white-space:nowrap}
+  #s-external .xl-open svg.i{width:18px;height:18px}
+</style>
+<div class="stage"><div class="scaler"><div class="frame xm">
+  <aside class="xl-rail">
+    <div class="xl-top"><img src="prophet-logo.png" alt="Prophet"><svg class="i" aria-label="Collapse sidebar"><use href="#i-panel"/></svg></div>
+    <div class="xl-grow"></div>
+    <div class="xl-foot">
+      <div class="xl-row"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>UI Configuration</div>
+      <div class="xl-row"><svg class="i"><use href="#i-out"/></svg>Agent Studio</div>
+      <a class="xl-row" href="#external-orgs" title="Switch client space"><svg class="i"><use href="#i-org"/></svg>Larkfield Coffee<svg class="i chev"><use href="#i-down"/></svg></a>
+      <div class="xl-row xl-user"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><div class="who"><b>Bhavya Patel</b><span>bpatel@prophet.com</span></div></div>
+    </div>
+  </aside>
+  <div class="xl-main">
+    <a class="xl-back" href="#external-orgs">← All client spaces</a>
+    <div class="xl-head">
+      <span class="xl-client">Larkfield Coffee</span><span class="xl-pipe"></span>
+      <svg class="wm" viewBox="15 0 88 30" xmlns="http://www.w3.org/2000/svg" aria-label="MAIA"><path transform="translate(-168.976, 0)" d="M184.771 24.832V1.95203H193.315L197.699 14.144L202.083 1.95203H210.467V24.832H203.939V10.592L198.339 24.832H196.163L190.627 10.592V24.832H184.771ZM213.135 24.832L220.463 1.95203H228.943L236.207 24.832H229.263L228.047 20.576H220.463L219.247 24.832H213.135ZM224.271 7.26403L221.743 16.064H226.767L224.271 7.26403ZM238.961 24.832V1.95203H245.585V24.832H238.961ZM248.291 24.832L255.619 1.95203H264.099L271.363 24.832H264.419L263.203 20.576H255.619L254.403 24.832H248.291ZM259.427 7.26403L256.899 16.064H261.923L259.427 7.26403Z" fill="#000"/></svg>
+      <span class="xl-ver">V1.15</span>
+    </div>
+    <div class="xl-nav"><span class="on">Home</span><span>Agent Library</span></div>
+    <div class="xl-banner"><p>Here you'll find the playbook — a reusable resource documenting how Larkfield's current workflows can be augmented with Prophet's agents and apps.</p></div>
+    <div class="xl-label"><i></i><span>Your applications</span></div>
+    <div class="xl-apps">
+      <div class="xl-app"><span class="xl-ico"><svg class="i"><use href="#i-layers"/></svg></span><div><h4>Marketing Use Case Hub</h4><p>Supporting Larkfield's AI strategy and integration</p></div><a class="xl-open" href="#architect"><svg class="i"><use href="#i-out"/></svg>Open app</a></div>
+      <div class="xl-app"><span class="xl-ico"><svg class="i"><use href="#i-chart"/></svg></span><div><h4>Market Sizing</h4><p>Size Larkfield's subscription and wholesale markets with sources and assumptions</p></div><a class="xl-open" href="#architect"><svg class="i"><use href="#i-out"/></svg>Open app</a></div>
+      <div class="xl-app"><span class="xl-ico"><svg class="i"><use href="#i-pen"/></svg></span><div><h4>Writing Studio (Larkfield)</h4><p>On-brand copy in Larkfield's voice, tuned with the brand book Prophet delivered</p></div><a class="xl-open" href="#external"><svg class="i"><use href="#i-msg"/></svg>Start chat</a></div>
+    </div>
+  </div>
+</div></div></div>
+</section>
+
+<!-- ===== 3a. External MAIA: client spaces ===== -->
+<section class="screen" id="s-external-orgs">
+<div class="stage"><div class="scaler"><div class="frame xm">
+  <div class="domain"><svg class="i"><use href="#i-lock"/></svg><code>clients.maia.prophet.com</code>· Separate domain · signed in via Prophet SSO (Azure)</div>
+  <div class="ext-body">
+    <aside class="rail">
+      <div class="top-r"><img src="prophet-logo.png" alt="Prophet"><span class="ib"><svg class="i"><use href="#i-panel"/></svg></span></div>
+      <div class="grow"></div>
+      <div class="row"><svg class="i"><use href="#i-help"/></svg>Help / Support</div>
+      <hr>
+      <div class="user"><div class="av">BP</div><div class="who"><b>Bhavya Patel</b><span>bpatel@prophet.com</span><small>Prophet admin</small></div></div>
+    </aside>
+    <div class="mpage">
+      <div class="mhead">
+        <span class="pw">PROPHET</span><span class="pipe"></span>
+        <svg class="wm" viewBox="15 0 88 30" xmlns="http://www.w3.org/2000/svg" aria-label="MAIA"><path transform="translate(-168.976, 0)" d="M184.771 24.832V1.95203H193.315L197.699 14.144L202.083 1.95203H210.467V24.832H203.939V10.592L198.339 24.832H196.163L190.627 10.592V24.832H184.771ZM213.135 24.832L220.463 1.95203H228.943L236.207 24.832H229.263L228.047 20.576H220.463L219.247 24.832H213.135ZM224.271 7.26403L221.743 16.064H226.767L224.271 7.26403ZM238.961 24.832V1.95203H245.585V24.832H238.961ZM248.291 24.832L255.619 1.95203H264.099L271.363 24.832H264.419L263.203 20.576H255.619L254.403 24.832H248.291ZM259.427 7.26403L256.899 16.064H261.923L259.427 7.26403Z" fill="#000"/></svg>
+        <span class="tag">Client spaces</span>
+      </div>
+      <div class="mnav"><a href="#external-orgs"><span class="on">Client spaces</span></a><span>Help</span><div class="r"><svg class="i"><use href="#i-bell"/></svg><span class="sbtn"><svg class="i"><use href="#i-search"/></svg>Search</span></div></div>
+      <div class="xwrap">
+        <div class="xh"><div><h1>Your client spaces</h1><p>Spaces you've been added to. Each one is a separate org with its own agents, apps and users.</p></div><div class="act"><a class="btn lg" href="#external-create">+ Create client space</a><small>Prophet admins only</small></div></div>
+        <div class="grid">
+          <div class="card scard"><div class="hd"><span class="lg" style="background:#7c2d12">LC</span><div><h3>Larkfield Coffee</h3><span class="role admin">Admin</span></div><span class="sst"><i></i>Live</span></div><div class="cnt">3 agents · 2 apps · 14 users</div><div class="ft"><span>Last opened today</span><a class="btn" href="#external">Open space<svg class="i"><use href="#i-arrow"/></svg></a></div></div>
+          <div class="card scard"><div class="hd"><span class="lg" style="background:#1e3a8a">NR</span><div><h3>Northwind Roasters</h3><span class="role member">Member</span></div><span class="sst"><i></i>Live</span></div><div class="cnt">2 agents · 1 app · 6 users</div><div class="ft"><span>Last opened 3 days ago</span><a class="btn" href="#external">Open space<svg class="i"><use href="#i-arrow"/></svg></a></div></div>
+          <div class="card scard"><div class="hd"><span class="lg" style="background:#0f766e">MH</span><div><h3>Meridian Health</h3><span class="role member">Member</span></div><span class="sst pilot"><i></i>Pilot</span></div><div class="cnt">1 agent · 1 app · 9 users</div><div class="ft"><span>Last opened 2 weeks ago</span><a class="btn" href="#external">Open space<svg class="i"><use href="#i-arrow"/></svg></a></div></div>
+        </div>
+        <div class="xnote">Don't see a space you expect? Ask the Prophet lead on that account to add you.</div>
+      </div>
+    </div>
+  </div>
+</div></div></div>
+</section>
+
+<!-- ===== 3b. External MAIA: create client space ===== -->
+<section class="screen" id="s-external-create">
+<div class="stage"><div class="scaler"><div class="frame xm">
+  <div class="domain"><svg class="i"><use href="#i-lock"/></svg><code>clients.maia.prophet.com</code>· Separate domain · signed in via Prophet SSO (Azure)</div>
+  <div class="ext-body">
+    <aside class="rail">
+      <div class="top-r"><img src="prophet-logo.png" alt="Prophet"><span class="ib"><svg class="i"><use href="#i-panel"/></svg></span></div>
+      <div class="grow"></div>
+      <div class="row"><svg class="i"><use href="#i-help"/></svg>Help / Support</div>
+      <hr>
+      <div class="user"><div class="av">BP</div><div class="who"><b>Bhavya Patel</b><span>bpatel@prophet.com</span><small>Prophet admin</small></div></div>
+    </aside>
+    <div class="mpage">
+      <div class="mhead">
+        <span class="pw">PROPHET</span><span class="pipe"></span>
+        <svg class="wm" viewBox="15 0 88 30" xmlns="http://www.w3.org/2000/svg" aria-label="MAIA"><path transform="translate(-168.976, 0)" d="M184.771 24.832V1.95203H193.315L197.699 14.144L202.083 1.95203H210.467V24.832H203.939V10.592L198.339 24.832H196.163L190.627 10.592V24.832H184.771ZM213.135 24.832L220.463 1.95203H228.943L236.207 24.832H229.263L228.047 20.576H220.463L219.247 24.832H213.135ZM224.271 7.26403L221.743 16.064H226.767L224.271 7.26403ZM238.961 24.832V1.95203H245.585V24.832H238.961ZM248.291 24.832L255.619 1.95203H264.099L271.363 24.832H264.419L263.203 20.576H255.619L254.403 24.832H248.291ZM259.427 7.26403L256.899 16.064H261.923L259.427 7.26403Z" fill="#000"/></svg>
+        <span class="tag">Client spaces</span>
+      </div>
+      <div class="mnav"><a href="#external-orgs"><span class="on">Client spaces</span></a><span>Help</span><div class="r"><svg class="i"><use href="#i-bell"/></svg><span class="sbtn"><svg class="i"><use href="#i-search"/></svg>Search</span></div></div>
+      <div class="crumb"><a href="#external-orgs">Client spaces</a> › New</div>
+      <div class="fcard">
+        <h1>Create client space</h1>
+        <div class="sub">One step. This replaces the separate UI Configuration page: branding and screens are set here and can be edited later from inside the space.</div>
+        <div class="fld"><label>Client name</label><div class="inp ph">Larkfield Coffee</div></div>
+        <div class="fld"><label>Space URL</label><div class="inp"><span class="pre">clients.maia.prophet.com/</span>larkfield</div></div>
+        <div class="fld"><label>Logo</label><div class="drop"><svg class="i"><use href="#i-out"/></svg>Drop a transparent SVG, 150×30</div></div>
+        <div class="fld"><label>Screens</label><div class="checks"><span><b class="y">✓</b>Home</span><span><b class="y">✓</b>Agent Library</span><span><b class="y">✓</b>Help</span><span><b></b>Accelerator Network</span></div></div>
+        <div class="fld"><label>Prophet admins</label><div class="chips"><span><i>BP</i>Bhavya Patel</span><span><i>DD</i>Dean Dowling</span><span class="add">+ Add</span></div></div>
+        <div class="fld"><label>Client seats</label><div><div class="inp num">10</div><span class="cap">Clients sign in with their own email; invites go out when you create the space</span></div></div>
+        <div class="dnote">Agents and apps are deployed into this space through Architect after it's created.</div>
+        <div class="facts"><a class="btn ghost lg" href="#external-orgs">Cancel</a><a class="btn lg" href="#external">Create space</a></div>
+      </div>
+    </div>
+  </div>
+</div></div></div>
+</section>
+
+<!-- ===== 4. Studio ===== -->
+<section class="screen" id="s-studio">
+<div class="stage"><div class="scaler"><div class="frame doc center">
+  <div class="card solo">
+    <div class="eyebrow">Agent Studio</div>
+    <h1 style="font-size:26px;font-weight:600;margin:0 0 6px">Studio — backend for MAIA agents, UI on request</h1>
+    <p>Studio is retired as a core part of the MAIA experience and no longer appears in the daily UI. It stays as the <b>authoring layer for Lyzr API agents</b> behind Architect apps and External MAIA, and as a UI for <b>power users on request</b>, case by case. Everyday building moves to <b>skills</b> in MAIA Cowork and <b>Architect apps</b>. The dotted line on the diagram is the open question of whether Studio is ever surfaced inside MAIA Cowork.</p>
+    <div class="acts"><a class="btn ghost lg" href="#diagram"><svg class="i"><use href="#i-left"/></svg>Back to diagram</a><a class="btn lg" href="#cowork-agents">See Agents Hub instead<svg class="i"><use href="#i-arrow"/></svg></a></div>
+  </div>
+</div></div></div>
+</section>
+
+
+
+
+
+<!-- ===== Backwards compatibility plan ===== -->
+<section class="screen" id="s-compat">
+<div class="stage"><div class="scaler"><div class="frame doc bc">
+  <div class="eyebrow">Proposal · 21 Oct 2026</div>
+  <h1>Backwards compatibility plan — MAIA → MAIA Cowork</h1>
+  <p class="lede">Proposal, 21 Oct 2026. How existing Studio agents, Architect apps and chat sessions carry over, without knowing Cowork&#x27;s schema or all of MAIA&#x27;s implementation yet.</p>
+<h2 class="bc-h">1. What we know and what we don&#x27;t</h2>
+<p>Known</p>
+<ul class="bc-l">
+<li>MAIA agents are Lyzr Studio agents: each has a stable Lyzr agent ID and runs on Lyzr API. MAIA&#x27;s Agent Library is a catalogue over those IDs with Prophet metadata (endorsed / restricted / private, author, favourites, ratings, query counts, conversation starters).</li>
+<li>Architect apps are Next.js web apps on their own URLs, gated by Keycloak SSO (SSOGuard), calling Lyzr API agents through the app&#x27;s own /api/agent proxy. The library only stores a card and an &quot;Open app&quot; link.</li>
+<li>Cowork&#x27;s Agents Hub says it holds &quot;agents you build, agents shared with you, and agents your company runs here or imports from elsewhere&quot;. &quot;Imports from elsewhere&quot; is the hook to test first.</li>
+<li>Both sides authenticate through Azure, so a user&#x27;s identity (email) is the same object in MAIA and Cowork. Ownership can map by email.</li>
+<li>Cowork keeps chats, projects, artifacts and skills in its own store; its UI shows chats grouped by day with ids and timestamps, and projects with shared instructions and files.</li>
+</ul>
+<p>Unknown (and who answers it)</p>
+<ul class="bc-l">
+<li>Cowork&#x27;s data model for agents, chats, projects, artifacts: fields, ids, whether there is an import API. (Lyzr)</li>
+<li>Whether Agents Hub can reference an external Lyzr agent by ID without copying it. (Lyzr)</li>
+<li>MAIA&#x27;s chat storage: where General Chat conversations live, export format, attachment storage (S3 bucket seen: prophet-maia-chat-attachments). (Lyzr, with Foundry confirming)</li>
+<li>Exact list of production agents, apps and owners after removing UAT test agents. (Foundry)</li>
+</ul>
+<h2 class="bc-h">2. Principles</h2>
+<ul class="bc-l">
+<li>Reference, don&#x27;t copy. Wherever Cowork can point at an existing Lyzr agent ID or app URL, do that. No rebuilds in phase 1.</li>
+<li>Nothing is deleted on cutover. Internal MAIA stays up read-only for a defined window.</li>
+<li>Identity maps by email. No manual re-assignment of ownership.</li>
+<li>Each track has a cheapest option that works with zero Lyzr changes, and a better option that needs one.</li>
+</ul>
+<h2 class="bc-h">3. Track A — Studio agents → Agents Hub</h2>
+<table class="bc-t"><thead><tr><th>Option</th><th>What it is</th><th>Needs from Lyzr</th><th>Verdict</th></tr></thead><tbody>
+<tr><td>A1 Native reference</td><td>Register each Lyzr agent ID as a Company agent in Agents Hub. Runs on Lyzr API as today. Metadata (name, description, starters, tier) mapped across.</td><td>Confirm &quot;imports from elsewhere&quot; supports Lyzr agents by ID; a bulk import or API.</td><td>Preferred. Zero rebuild, one source of truth.</td></tr>
+<tr><td>A2 MCP / skill wrapper</td><td>Expose each agent as a tool on Prophet&#x27;s MCP server (call Lyzr API agent X). Cowork reaches it through MCP.</td><td>None.</td><td>Fallback if A1 is not possible. Works, but agents appear as tools, not cards.</td></tr>
+<tr><td>A3 Rebuild</td><td>Re-author in Cowork&#x27;s agent builder.</td><td>None.</td><td>Only for agents being rewritten anyway (Ask MAIA).</td></tr>
+</tbody></table>
+<p>Tier mapping: endorsed → Company; restricted → Company + request-access (needs the enhancement) or Shared-with-me lists maintained by the approver until then; private → Mine, owner by email.</p>
+<p>Not migrated: UAT and test agents (anything named UAT-*, test, retest, nil*, Copy). Favourites, ratings and query counts: keep in Snowflake as history; do not try to recreate in Cowork.</p>
+<p>Ask MAIA: rewrite for Cowork (its knowledge is the old UI). Likely becomes a skill plus the Help &amp; Info drawer rather than a chat agent.</p>
+<h2 class="bc-h">4. Track B — Architect apps → Agents Hub &quot;Open app&quot;</h2>
+<table class="bc-t"><thead><tr><th>Option</th><th>What it is</th><th>Needs</th><th>Verdict</th></tr></thead><tbody>
+<tr><td>B1 Link cards</td><td>Agents Hub card with app URL, owner, tier, &quot;Open app&quot; in a new tab. Architect gains a &quot;publish to Agents Hub&quot; target that writes the card.</td><td>Cowork: a card type that is just a link (or an agent with a launch URL). Architect: one more deploy target.</td><td>Phase 1. Apps unchanged.</td></tr>
+<tr><td>B2 SSO pass-through</td><td>Make sure Keycloak and Azure sessions are shared so &quot;Open app&quot; never prompts.</td><td>Keycloak client config; no app changes.</td><td>Do with B1.</td></tr>
+<tr><td>B3 Embedded</td><td>App opens inside Cowork (iframe or panel) with identity passed in.</td><td>Lyzr: embed support. Apps: accept Cowork session, frame-ancestors.</td><td>Later; see enhancements.</td></tr>
+</tbody></table>
+<p>Client-space apps: unchanged. Architect keeps deploying to client sub-orgs; those cards never appear in the internal hub.</p>
+<h2 class="bc-h">5. Track C — Existing chat sessions</h2>
+<table class="bc-t"><thead><tr><th>Option</th><th>What it is</th><th>Needs</th><th>Verdict</th></tr></thead><tbody>
+<tr><td>C1 Read-only archive</td><td>Keep internal MAIA General Chat readable (no new chats) for 90 days. Cowork Help &amp; Info gets a &quot;Previous MAIA chats&quot; link.</td><td>Nothing new. Intranet link flips to Cowork; old URL stays.</td><td>Do this regardless.</td></tr>
+<tr><td>C2 Import</td><td>Export MAIA conversations (messages, timestamps, attachments) and import into Cowork as chats, owned by email, in a &quot;Imported from MAIA&quot; project.</td><td>Lyzr: export from MAIA + import API or schema for Cowork chats. Attachment re-upload from S3.</td><td>Only if Lyzr exposes both ends. Pilot with one user first.</td></tr>
+<tr><td>C3 Summaries only</td><td>Per user, generate a short &quot;what you were working on&quot; document into a Cowork project.</td><td>Nothing from Lyzr; a script over the export.</td><td>Cheap middle ground if C2 is heavy.</td></tr>
+</tbody></table>
+<p>Favourites → optional: pre-pin the user&#x27;s favourite agents in Agents Hub if the import API supports it. Otherwise skip.</p>
+<h2 class="bc-h">6. Sequence and gates</h2>
+<ul class="bc-l">
+<li>Discovery (1–2 weeks): Lyzr answers the schema questions below; Foundry produces the inventory (agents, apps, owners, tiers, usage from Eval/Dashboard, chat volume).</li>
+<li>Pilot (2 weeks): A1 or A2 with 5 agents, B1+B2 with 2 apps, C1 on, for a 10-person group. Gate: every pilot user can reach their agents and apps from Cowork without a login prompt.</li>
+<li>Cutover: intranet link → Cowork; internal MAIA read-only; Ask MAIA rewritten; usage events flowing to Snowflake.</li>
+<li>Close-out (90 days later): decide on C2/C3 from what pilot users actually missed; retire internal MAIA.</li>
+</ul>
+<p>Rollback at any gate: flip the intranet link back; nothing has been deleted.</p>
+<h2 class="bc-h">7. Questions for Lyzr that unblock this</h2>
+<ul class="bc-l">
+<li>Agents Hub: can a Company agent reference an existing Lyzr Studio agent by ID, and is there a bulk import? What fields does an agent object have (name, description, starters, tags, visibility, owner)?</li>
+<li>Can an Agents Hub card be a launch link to an external app (Architect app) with an &quot;Open app&quot; action? Can Architect write that card as a deploy target?</li>
+<li>Chat schema: what does a Cowork chat/message/attachment look like, is there an import API, and are chat ids stable across upgrades?</li>
+<li>MAIA export: can MAIA conversations and attachments be exported per user, in what format?</li>
+<li>Identity: is the user&#x27;s email the stable key on both sides, so ownership maps without manual work?</li>
+<li>What survives a Cowork upgrade: imported agents, cards, chats, config? (ties to the delivery model item)</li>
+</ul>
+</div></div></div>
+</section>
+
+<!-- ===== 5. Architect ===== -->
+<section class="screen" id="s-architect">
+<div class="stage"><div class="scaler"><div class="frame doc" style="background:#fff">
+  <div style="display:flex;align-items:flex-end;gap:16px"><div><div class="eyebrow">Architect</div><h1>Architect — deployment pipeline</h1></div><span class="btn lg" style="margin-left:auto"><svg class="i"><use href="#i-plus"/></svg>New deployment</span></div>
+  <p class="lede">Apps are built from GitHub, backed by a Lyzr API agent, and deployed to an internal target, a client space, or both.</p>
+  <div class="arch">
+    <div>
+      <div class="bar"><div class="tabs"><span class="on">All <em>5</em></span><span>Deployed <em>3</em></span><span>Building <em>1</em></span><span>Failed <em>1</em></span></div><div class="search"><svg class="i"><use href="#i-search"/></svg>Search apps</div></div>
+      <table>
+        <thead><tr><th>App</th><th>Source (GitHub repo)</th><th>Backend (Lyzr API agent)</th><th>Target</th><th>Status</th><th>Last deploy</th></tr></thead>
+        <tbody>
+          <tr><td><b>Presentation Studio</b></td><td><code>prophet/presentation-studio</code></td><td><code>ps-compose-agent</code></td><td>Internal: Agents Hub</td><td><span class="st">Deployed</span></td><td>2 hours ago</td></tr>
+          <tr><td><b>Market Sizing</b></td><td><code>prophet/market-sizing</code></td><td><code>market-sizing-agent</code></td><td>Both</td><td><span class="st">Deployed</span></td><td>Yesterday</td></tr>
+          <tr><td><b>Brand Architecture Explorer</b></td><td><code>prophet/brand-arch-explorer</code></td><td><code>brand-arch-agent</code></td><td>Client: Larkfield Coffee</td><td><span class="st b">Building</span></td><td>Running, 4 min</td></tr>
+          <tr><td><b>Writing Studio (Larkfield)</b></td><td><code>prophet/writing-studio</code></td><td><code>writing-larkfield-agent</code></td><td>Client: Larkfield Coffee</td><td><span class="st">Deployed</span></td><td>3 days ago</td></tr>
+          <tr><td><b>Survey Insights</b></td><td><code>prophet/survey-insights</code></td><td><code>survey-synth-agent</code></td><td>Internal: Agents Hub</td><td><span class="st f">Failed</span></td><td>20 Oct, 14:12</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><svg class="i"><use href="#i-help"/></svg><span><b>Needs a reliable pipeline and a clearer target picker</b> (flagged as a choke point).</span></div>
+    </div>
+    <div class="card">
+      <h3>Deploy targets</h3>
+      <p style="margin-bottom:6px">Every app picks one or both destinations at deploy time.</p>
+      <div class="tgt"><b>Internal: Agents Hub</b><span>Listed in MAIA Cowork's Agents Hub with an "Open app" action. Same pipeline, no separate domain.</span><a class="pill" href="#cowork-agents">Agents Hub<svg class="i" style="width:13px;height:13px"><use href="#i-arrow"/></svg></a></div>
+      <div class="tgt"><b>Client: External MAIA</b><span>Published into a client sub-org (for example Larkfield Coffee) on the client domain.</span><a class="pill" href="#external-orgs">External MAIA<svg class="i" style="width:13px;height:13px"><use href="#i-arrow"/></svg></a></div>
+      <div class="tgt" style="margin:0"><b>Inputs</b><span>Code from GitHub, backend agents from the Lyzr API.</span><span class="flows"><a class="pill" href="#github">GitHub</a><a class="pill" href="#lyzr">Lyzr API</a></span></div>
+    </div>
+  </div>
+</div></div></div>
+</section>
+
+<!-- ===== 6. GitHub ===== -->
+<section class="screen" id="s-github">
+<div class="stage"><div class="scaler"><div class="frame doc">
+  <div class="eyebrow">Inside Prophet's GitHub</div>
+  <h1>GitHub — App code, agents, skills, MCP servers</h1>
+  <p class="lede">One source of truth for what makes Prophet's AI work distinctive. Cowork and Claude read it; Architect deploys from it.</p>
+  <div class="grid" style="grid-template-columns:repeat(2,1fr);gap:20px">
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-net"/></svg></span><h3>Knowledge graph MCP<small>Reads from Snowflake</small></h3></div><p>Clients, frameworks, case studies and point-of-view content, read from Snowflake and served to any MCP client.</p><div class="flows"><a class="pill" href="#cowork">→ MAIA Cowork</a><a class="pill" href="#claude">→ Claude</a></div></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-star"/></svg></span><h3>Skills repo<small>Prophet sauce</small></h3></div><p>Endorsed skills: slides and exec summaries, document review, research, data analysis.</p><div class="flows"><a class="pill" href="#cowork-skills">→ MAIA Cowork</a><a class="pill" href="#claude">→ Claude</a></div></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-palette"/></svg></span><h3>Design system MCP<small>Prophet sauce</small></h3></div><p>The "Prophet" design system: type, colour, layouts and slide templates.</p><div class="flows"><a class="pill" href="#cowork">→ MAIA Cowork</a><a class="pill" href="#claude">→ Claude</a></div></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-git"/></svg></span><h3>App code and agents<small>Pushed from Claude Code</small></h3></div><p>Web app repos and agent definitions. Every merge can trigger a deploy.</p><div class="flows"><a class="pill" href="#architect">→ Architect</a></div></div>
+  </div>
+</div></div></div>
+</section>
+
+<!-- ===== 6b. Snowflake ===== -->
+<section class="screen" id="s-snowflake">
+<div class="stage"><div class="scaler"><div class="frame doc">
+  <div class="eyebrow">Inside Prophet's AWS</div>
+  <h1>Snowflake — all data: Prophet knowledge, usage</h1>
+  <p class="lede">IT-owned, on an 18-month plan: ClickHouse usage data first, then finance, CRM, marketing and pipeline. Foundry is a customer of it, not the owner.</p>
+  <div class="grid" style="grid-template-columns:repeat(2,1fr);gap:20px">
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-layers"/></svg></span><h3>Usage data first (ClickHouse)<small>Internal store</small></h3></div><p>Served to MAIA Cowork and, when we want it, Claude.</p><div class="flows"><a class="pill" href="#cowork">→ MAIA Cowork</a><a class="pill" href="#claude">→ Claude</a></div></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-chart"/></svg></span><h3>Usage and analytics<small>Every surface</small></h3></div><p>Every chat, skill and agent run is measurable here.</p><div class="flows"><a class="pill" href="#architect">→ Architect</a></div></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-lock"/></svg></span><h3>Client data only in its own warehouse<small>Rule to enforce</small></h3></div><p>Client material lives in a per-client Snowflake database (CLIENT_LARKFIELD …), membership-gated, never joined with the Prophet warehouse. Synced only through the Client warehouse MCP.</p><div class="flows"><a class="pill" href="#clientdata">→ Client data</a></div></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-net"/></svg></span><h3>Feeds the knowledge graph<small>Structured data</small></h3></div><p>Usage and corporate data flow into the knowledge graph as they land. The MCP servers read Snowflake directly for numbers.</p><div class="flows"><a class="pill" href="#knowledge">→ Knowledge graph</a><a class="pill" href="#mcp">→ MCP servers</a></div></div>
+  </div>
+</div></div></div>
+</section>
+
+<section class="screen" id="s-knowledge">
+<div class="stage"><div class="scaler"><div class="frame doc">
+  <div class="eyebrow">Inside Prophet's AWS · Foundry</div>
+  <h1>Prophet knowledge base — AWS Neptune + S3</h1>
+  <p class="lede">The Prophet brain. Documents land in S3, the entity graph lives in AWS Neptune, and a passage index sits beside them for semantic search. Related by embeddings and ontology rather than hand-built tables. Snowflake feeds it structured entities; the Knowledge graph MCP serves it.</p>
+  <div class="grid" style="grid-template-columns:repeat(2,1fr);gap:20px">
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-file"/></svg></span><h3>Sources and ingestion<small>SharePoint → S3 → Neptune</small></h3></div><p>SharePoint, past client decks, frameworks and points of view. Ingestion copies each file to S3, extracts text and entities into Neptune and the index, and carries the SharePoint ACL and client tag through so the MCP server can filter per user. Deleting a document means removing the S3 object and its graph node together.</p></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-net"/></svg></span><h3>Three parts, one brain<small>S3 + Neptune + passage index</small></h3></div><p><b>S3</b> is the document store: every ingested deck, doc and page as the source of truth, versioned, with its SharePoint ACL and client tag as object metadata. <b>AWS Neptune</b> holds the entity graph: clients, engagements, frameworks, people, documents and how they relate, with each document node pointing at its S3 object. Neptune is not a vector store, so a <b>passage index</b> (Neptune Analytics vector similarity, or OpenSearch / pgvector) sits beside it for semantic search. <code>kg.search</code> hits the index, <code>kg.related</code> walks Neptune, <code>kg.get_document</code> reads S3.</p></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-net"/></svg></span><h3>Served through<small>Knowledge graph MCP</small></h3></div><p>The knowledge graph MCP server serves it to MAIA Cowork, and to Claude when we want it.</p><div class="flows"><a class="pill" href="#cowork">→ MAIA Cowork</a><a class="pill" href="#claude">→ Claude</a><a class="pill" href="#mcp">MCP servers</a></div></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-chart"/></svg></span><h3>Fed by Snowflake<small>Structured entities</small></h3></div><p>Clients, engagements and people from Snowflake tables are loaded into Neptune as nodes, so a deck can be joined to the engagement it belonged to. Whether extracted entities flow back to Snowflake as tables is still a decision.</p><div class="flows"><a class="pill" href="#snowflake">Snowflake →</a></div></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-org"/></svg></span><h3>Owner<small>Foundry</small></h3></div><p>Foundry owns it; the graph RAG work is led by Jonathan's team.</p></div>
+  </div>
+</div></div></div>
+</section>
+
+<section class="screen" id="s-mcp">
+<div class="stage"><div class="scaler"><div class="frame doc mcp">
+  <div class="eyebrow">Inside Prophet's AWS · Foundry · hypothetical design</div>
+  <h1>MCP servers (AWS) — the compute step</h1>
+  <p class="lede">When a user asks Cowork something that needs Prophet context, the call goes to these servers. They check who is asking, read the knowledge graph or the right warehouse, and return an answer with its sources. Everything here is a proposal to react to, not a build.</p>
+
+  <h2 class="bc-h">A. Request flow</h2>
+  <div class="chain">
+    <div class="step"><span class="n">1</span><b>User asks in Cowork</b><span>"How many clients did we work with in 2025?"</span></div>
+    <div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div>
+    <div class="step"><span class="n">2</span><b>Cowork picks a tool</b><span>From the MCP manifest, and sends the call with the user's token.</span></div>
+    <div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div>
+    <div class="step"><span class="n">3</span><b>Gateway checks identity</b><span>Validates the token (Azure via Keycloak), resolves role and tenant.</span></div>
+    <div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div>
+    <div class="step"><span class="n">4</span><b>Server runs the tool</b><span>Knowledge graph and Snowflake in parallel when both are needed.</span></div>
+    <div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div>
+    <div class="step"><span class="n">5</span><b>Result returns</b><span>With sources and row counts; Cowork writes the answer.</span></div>
+    <div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div>
+    <div class="step"><span class="n">6</span><b>Call is logged</b><span>As a usage event into Snowflake.</span></div>
+  </div>
+
+  <h2 class="bc-h">B. The servers</h2>
+  <div class="srv">
+    <div class="card">
+      <div class="hd"><span class="ic"><svg class="i"><use href="#i-net"/></svg></span><h3>Knowledge graph MCP<small>Unstructured Prophet knowledge: graph RAG over decks, documents and SharePoint</small></h3></div>
+      <p class="kv"><b>Reads</b> The Prophet knowledge base: AWS Neptune (entity graph: clients, engagements, frameworks, people, documents), S3 (the documents themselves, with ACL and client tag as metadata) and a passage index beside them. <code>kg.search</code> hits the index, <code>kg.related</code> walks Neptune, <code>kg.get_document</code> reads S3.</p>
+      <table class="bc-t"><tr><th>Tool</th><th>What it does</th><th>Returns</th></tr>
+        <tr><td><code>kg.search(query, filters)</code></td><td>Searches Prophet knowledge</td><td>Ranked passages with source doc, client, date</td></tr>
+        <tr><td><code>kg.related(entity)</code></td><td>Walks the graph from an entity</td><td>Connected clients, frameworks, people, engagements</td></tr>
+        <tr><td><code>kg.get_document(id, pages)</code></td><td>Opens a source</td><td>The source itself, with citation</td></tr>
+        <tr><td><code>kg.timeline(client)</code></td><td>Orders a client's history</td><td>Engagements and deliverables in order</td></tr>
+        <tr><td><code>kg.suggest_tags(doc)</code></td><td>Tags for the knowledge library ("tagging in a library of knowledge bases")</td><td>Suggested tags</td></tr>
+      </table>
+      <p class="kv"><b>Identity</b> User's Azure identity; results filtered to documents the user may see in SharePoint.</p>
+      <p class="kv"><b>Example</b> "Pull the positioning frameworks we used for coffee clients."</p>
+      <div class="flows"><a class="pill" href="#knowledge">→ Knowledge graph</a><a class="pill" href="#github">→ GitHub</a></div>
+    </div>
+    <div class="card">
+      <div class="hd"><span class="ic"><svg class="i"><use href="#i-chart"/></svg></span><h3>Snowflake MCP (Prophet warehouse)<small>Structured Prophet data: usage first, then corporate</small></h3></div>
+      <p class="kv"><b>Reads</b> Prophet warehouse in Snowflake (ClickHouse usage data now; finance, CRM, pipeline, marketing as IT lands them).</p>
+      <table class="bc-t"><tr><th>Tool</th><th>What it does</th><th>Returns</th></tr>
+        <tr><td><code>sf.describe(domain)</code></td><td>Lists what the user's role may query</td><td>Tables and columns</td></tr>
+        <tr><td><code>sf.query(sql | question, limit)</code></td><td>Read-only query, 10k-row cap</td><td>Rows, with the SQL that ran and row count</td></tr>
+        <tr><td><code>sf.metric(name, period, by)</code></td><td>Looks up a governed number</td><td>Clients served, usage per agent, cost per answer</td></tr>
+        <tr><td><code>sf.lineage(table)</code></td><td>Traces a table</td><td>Where the data came from and when it refreshed</td></tr>
+      </table>
+      <p class="kv"><b>Identity</b> User token mapped to a Snowflake role (Prophet_Consultant, Prophet_Finance, Foundry_Admin); no shared service account.</p>
+      <p class="kv"><b>Example</b> "How many clients does Prophet have?" → <code>sf.metric("clients_served", "2025")</code></p>
+      <div class="flows"><a class="pill" href="#snowflake">→ Snowflake</a><a class="pill" href="#architect">→ Architect</a></div>
+    </div>
+    <div class="card">
+      <div class="hd"><span class="ic"><svg class="i"><use href="#i-lock"/></svg></span><h3>Client warehouse MCP (one per client, isolated)<small>Client data warehoused separately so it never mixes with Prophet data</small></h3></div>
+      <p class="kv"><b>Reads</b> A per-client Snowflake database (CLIENT_LARKFIELD, CLIENT_NORTHWIND …) or the client's own systems at run time; one credential per client, held in AWS Secrets Manager.</p>
+      <table class="bc-t"><tr><th>Tool</th><th>What it does</th><th>Returns</th></tr>
+        <tr><td><code>cw.list_sources(client)</code></td><td>Lists the client's warehoused sources</td><td>What is warehoused and when it refreshed</td></tr>
+        <tr><td><code>cw.query(client, sql | question)</code></td><td>Queries that client's database only</td><td>Rows, scoped to the client</td></tr>
+        <tr><td><code>cw.sync(client, source)</code></td><td>Pulls from the client system into the client warehouse (Architect app or Foundry only)</td><td>Sync status</td></tr>
+        <tr><td><code>cw.export(client, dataset)</code></td><td>Exports a dataset</td><td>File for the client's own space</td></tr>
+      </table>
+      <p class="kv"><b>Identity</b> User must be a member of that client's org (Client MAIA) or the Architect app running for that client; Prophet-wide roles do not grant access.</p>
+      <p class="kv"><b>Example</b> An Architect app in Larkfield's space asks for Q3 store revenue.</p>
+      <p class="mnote">Replaces "client data never enters Snowflake" with "client data only enters its own warehouse".</p>
+      <div class="flows"><a class="pill" href="#clientdata">→ Client data</a><a class="pill" href="#external">→ Client MAIA</a></div>
+    </div>
+    <div class="card">
+      <div class="hd"><span class="ic"><svg class="i"><use href="#i-palette"/></svg></span><h3>Design system MCP<small>Prophet-branded output</small></h3></div>
+      <p class="kv"><b>Reads</b> Design system repo in GitHub (tokens, layouts, slide and doc templates).</p>
+      <table class="bc-t"><tr><th>Tool</th><th>What it does</th><th>Returns</th></tr>
+        <tr><td><code>ds.tokens()</code></td><td>Reads design tokens</td><td>Colours, type, spacing</td></tr>
+        <tr><td><code>ds.template(kind)</code></td><td>Fetches a scaffold</td><td>Slide, doc, one-pager scaffolds</td></tr>
+        <tr><td><code>ds.lint(artifact)</code></td><td>Checks an artifact against the brand</td><td>Off-brand findings</td></tr>
+        <tr><td><code>ds.assets(query)</code></td><td>Finds brand assets</td><td>Logos, icons, imagery with usage rules</td></tr>
+      </table>
+      <p class="kv"><b>Identity</b> Any Prophet user; read-only.</p>
+      <p class="kv"><b>Example</b> Cowork builds a client deck with <code>ds.template("deck")</code> then <code>ds.lint()</code>.</p>
+      <div class="flows"><a class="pill" href="#github">→ GitHub</a><a class="pill" href="#cowork">→ MAIA Cowork</a></div>
+    </div>
+  </div>
+
+  <h2 class="bc-h">C. Cross-cutting</h2>
+  <div class="card" style="margin-bottom:16px"><div class="hd"><span class="ic"><svg class="i"><use href="#i-layers"/></svg></span><h3>One skeleton, two data backends<small>Shared where it is not about the data</small></h3></div>
+    <p>The Snowflake and Knowledge graph servers are instances of the same base: the gateway (token, role, tenant), usage logging, guardrails, deployment and failure handling are shared, and both expose the same low-level contract: <code>describe</code> (what this user may see), <code>query</code> (run it, return rows plus the exact query that ran) and <code>lineage</code> (source and freshness). What differs is the query language underneath (SQL on Snowflake; openCypher or Gremlin on Neptune) and the task tools on top. The model writes good SQL and poor Gremlin, so on the graph the task tools (<code>kg.search</code>, <code>kg.related</code>, <code>kg.timeline</code>) are the main surface and raw <code>kg.query</code> sits behind an allow-list for Foundry and power users; on Snowflake <code>sf.query</code> with an allow-list does most of the work and <code>sf.metric</code> keeps governed numbers from being re-derived.</p>
+    <p>Neptune's own access control is coarse (IAM at cluster level), so per-user filtering by SharePoint permission is done by the server on the way out, from ACLs carried through at ingestion. That is a Foundry build item, not a store feature.</p>
+  </div>
+  <div class="xc">
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-shield"/></svg></span><h3>Identity and roles</h3></div><p>Azure token → Keycloak → MCP gateway validates the JWT. Role claims map to Snowflake roles and knowledge graph filters. No shared service account. Power users (Claude) use the same path with a personal token.</p></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-layers"/></svg></span><h3>Isolation</h3></div><p>Three tiers of data: Prophet warehouse (shared, role-filtered); client warehouses (one database per client, membership-gated); knowledge graph (Prophet knowledge only; client decks tagged by client and filtered by membership). Cross-tier joins are refused by the gateway.</p></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-chart"/></svg></span><h3>Logging and measurability</h3></div><p>Every call writes tool, user, role, tenant, latency, rows and cost to a <code>usage_events</code> table in Snowflake. Cowork and Client MAIA chat events land in the same table. This is what replaces the old Dashboard.</p></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-git"/></svg></span><h3>Deployment</h3></div><p>Code in GitHub, one repo per server. GitHub Actions builds containers; ECS Fargate in a private subnet; Snowflake over PrivateLink; secrets in Secrets Manager. Manifest published to Cowork at company level and to Claude for power users.</p></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-lock"/></svg></span><h3>Guardrails</h3></div><p>Read-only by default; row and time caps; SQL allow-list for <code>sf.query</code>; PII masking on finance and CRM columns; every answer carries its sources. <code>cw.sync</code> and <code>ds.lint</code> are the only tools that write anything.</p></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-help"/></svg></span><h3>Failure modes</h3></div><p>Token invalid → 401 and Cowork says "sign in again". Warehouse timeout → partial answer with "Snowflake didn't respond", the knowledge-graph half still returned. Schema change in IT's Snowflake → <code>sf.describe</code> fails loudly and the Foundry owner is paged.</p></div>
+  </div>
+
+  <h2 class="bc-h">D. Worked example</h2>
+  <p class="q">"How many clients did Prophet work with in 2025, and which frameworks did we use most?"</p>
+  <div class="we">
+    <ol class="trace">
+      <li>Cowork picks <code>sf.metric</code> and <code>kg.related</code> from the manifest.</li>
+      <li>Gateway validates the token and sees role <code>Prophet_Consultant</code>.</li>
+      <li><code>sf.metric("clients_served", "2025")</code> returns <b>48</b>, with the SQL shown.</li>
+      <li><code>kg.related("2025 engagements")</code> returns the top frameworks with their source decks.</li>
+      <li>Cowork composes the answer with two citations.</li>
+      <li>Usage event logged: 1.4s, 2 tools, 0 rows cached.</li>
+    </ol>
+    <div class="ans">
+      <div class="ans-hd"><svg class="i"><use href="#i-bot"/></svg>MAIA Cowork</div>
+      <div class="ans-n">48 <span>clients worked with in 2025</span></div>
+      <p>The frameworks used most across 2025 engagements:</p>
+      <ul>
+        <li>Brand positioning framework</li>
+        <li>Customer journey mapping</li>
+        <li>Growth opportunity sizing</li>
+      </ul>
+      <div class="srcs"><span class="src"><svg class="i"><use href="#i-chart"/></svg>Snowflake · clients_served, 2025</span><span class="src"><svg class="i"><use href="#i-file"/></svg>2025 engagement decks · knowledge graph</span></div>
+    </div>
+  </div>
+
+  <h2 class="bc-h">E. Open questions</h2>
+  <ul class="bc-l">
+    <li>Who owns the gateway on-call.</li>
+    <li>Whether Cowork can attach the user's token to MCP calls, or only a server key (ask Lyzr).</li>
+    <li>The Snowflake role model, agreed with IT.</li>
+    <li>When client warehouses are created (at Create client space?).</li>
+    <li>Knowledge graph filtering by SharePoint permissions.</li>
+    <li>Whether Claude power users get the same manifest.</li>
+  </ul>
+</div></div></div>
+</section>
+
+<section class="screen" id="s-clientdata">
+<div class="stage"><div class="scaler"><div class="frame doc">
+  <div class="eyebrow">Outside Prophet's AWS · Client</div>
+  <h1>Client data — client systems, outside Prophet's AWS</h1>
+  <p class="lede">Client systems connect to the Data MCP servers through the Client warehouse MCP: one credential per client in Secrets Manager, synced into a per-client Snowflake database that only that client's members and apps can reach, or queried at run time. Nothing enters the Prophet warehouse or the knowledge graph.</p>
+  <div class="grid" style="grid-template-columns:repeat(2,1fr);gap:20px">
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-globe"/></svg></span><h3>Where it lives<small>Client-owned</small></h3></div><p>In the client's own systems.</p></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-plug"/></svg></span><h3>How it's reached<small>Per-client connector</small></h3></div><p>Through a per-client connector held by the Architect app.</p><div class="flows"><a class="pill" href="#architect">→ Architect</a></div></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-lock"/></svg></span><h3>Rule<small>Own warehouse only</small></h3></div><p>Client data goes only into its own per-client warehouse, membership-gated. Never into the Prophet warehouse or the knowledge graph.</p></div>
+    <div class="card"><div class="hd"><span class="ic"><svg class="i"><use href="#i-help"/></svg></span><h3>Open<small>To decide</small></h3></div><p>Where credentials are stored, and who reviews them.</p></div>
+  </div>
+</div></div></div>
+</section>
+
+<!-- ===== 7. Claude ===== -->
+<section class="screen" id="s-claude">
+<div class="stage"><div class="scaler"><div class="frame doc">
+  <div class="eyebrow">Outside Prophet's AWS</div>
+  <h1>Claude — daily work, Claude Code</h1>
+  <p class="lede">Prophet people use Claude for daily work and Claude Code to build. It connects to GitHub in both directions.</p>
+  <div class="two">
+    <div class="card"><h3>Pulls Prophet sauce from GitHub</h3><p>Knowledge graph MCP, skills repo and design system MCP are available in Claude, the same as in MAIA Cowork.</p>
+      <div class="chain" style="margin-top:14px"><a class="step" href="#github"><b>GitHub</b><span>Prophet sauce</span></a><div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div><div class="step" style="border-color:var(--blue)"><b>Claude</b><span>Daily work</span></div></div></div>
+    <div class="card"><h3>Pushes code and agents to GitHub → Architect</h3><p>Apps and agents built in Claude Code land in GitHub, and Architect deploys them.</p>
+      <div class="chain" style="margin-top:14px"><div class="step" style="border-color:var(--blue)"><b>Claude Code</b><span>Builds</span></div><div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div><a class="step" href="#github"><b>GitHub</b><span>Code and agents</span></a><div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div><a class="step" href="#architect"><b>Architect</b><span>Deploys</span></a></div></div>
+  </div>
+</div></div></div>
+</section>
+
+<!-- ===== 8. Lyzr API ===== -->
+<section class="screen" id="s-lyzr">
+<div class="stage"><div class="scaler"><div class="frame doc">
+  <div class="eyebrow">Inside Prophet's AWS</div>
+  <h1>Lyzr API</h1>
+  <p class="lede">Backend for each web app. It feeds Architect, which deploys the app with its agent.</p>
+  <div class="two">
+    <div class="card"><h3>What it provides</h3><ul class="bul"><li><b>Agents</b> — one backend agent per web app</li><li><b>Inference</b> — model calls with the app's settings</li><li><b>Tool calls</b> — retrieval, MCP and app tools</li></ul></div>
+    <div class="card"><h3>Where it goes</h3><p>Each app in Architect names its Lyzr API agent as its backend.</p><div class="chain" style="margin-top:14px"><div class="step" style="border-color:var(--blue)"><b>Lyzr API</b><span>Agent backend</span></div><div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div><a class="step" href="#architect"><b>Architect</b><span>Deployment pipeline</span></a></div></div>
+  </div>
+  <div class="note"><svg class="i"><use href="#i-help"/></svg><span><b>Studio UI not required for this.</b> Backends are managed through the API; see <a href="#studio" style="text-decoration:underline">Studio</a>.</span></div>
+</div></div></div>
+</section>
+
+<!-- ===== 9. Users ===== -->
+<section class="screen" id="s-users">
+<div class="stage"><div class="scaler"><div class="frame doc">
+  <div class="eyebrow">Journey</div>
+  <h1>Prophet internal users</h1>
+  <p class="lede">One intranet link lands everyone in MAIA Cowork, the daily driver. Claude is given to a smaller group of AI power users, who also get the Prophet pieces (skills, MCP, knowledge). Client setup happens occasionally in External MAIA.</p>
+  <div class="chain">
+    <div class="step"><span class="n">1</span><b>Intranet link</b><span>maia.prophet.com, signed in with Prophet SSO.</span></div>
+    <div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div>
+    <a class="step" href="#cowork"><span class="n">2</span><b>MAIA Cowork</b><span>Daily work: chats, projects, skills and Agents Hub.</span><span class="go">Open MAIA Cowork →</span></a>
+    <div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div>
+    <a class="step" href="#claude"><span class="n">3</span><b>Claude / Claude Code</b><span>Daily work and building, with the same Prophet sauce.</span><span class="go">Open Claude →</span></a>
+    <div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div>
+    <a class="step dash" href="#external-orgs"><span class="n">4</span><b>Client suborg setup</b><span>Occasional: set up a client space in External MAIA.</span><span class="go">Open External MAIA →</span></a>
+  </div>
+</div></div></div>
+</section>
+
+<!-- ===== 10. Clients ===== -->
+<section class="screen" id="s-clients">
+<div class="stage"><div class="scaler"><div class="frame doc">
+  <div class="eyebrow">Journey</div>
+  <h1>Clients</h1>
+  <p class="lede">Clients never see MAIA Cowork. They use their own space on the client domain.</p>
+  <div class="chain">
+    <div class="step"><span class="n">1</span><b>Own domain</b><span>clients.maia.prophet.com, client login or Prophet SSO.</span></div>
+    <div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div>
+    <a class="step" href="#external"><span class="n">2</span><b>External MAIA</b><span>Their client space, scoped to their sub-org.</span><span class="go">Open External MAIA →</span></a>
+    <div class="arr"><svg class="i"><use href="#i-arrow"/></svg></div>
+    <a class="step" href="#external"><span class="n">3</span><b>Use agents and web apps</b><span>Built by Prophet and deployed through Architect.</span><span class="go">See their agents →</span></a>
+  </div>
+</div></div></div>
+</section>
+
+<script>
+(function () {
+  var ROUTES = {
+    diagram: ['diagram', 'Architecture diagram'],
+    'diagram-dev': ['diagram-dev', 'Dev / staging diagram'],
+    'diagram-exec': ['diagram-exec', 'Stakeholder view'],
+    compat: ['compat', 'Backwards compatibility plan'],
+    cowork: ['cowork', 'MAIA Cowork'],
+    'cowork-agents': ['cowork', 'MAIA Cowork · Agents Hub'],
+    'cowork-skills': ['cowork', 'MAIA Cowork · Skills'],
+    external: ['external', 'External MAIA · Larkfield Coffee'],
+    'external-orgs': ['external-orgs', 'Client spaces'],
+    'external-create': ['external-create', 'Create client space'],
+    studio: ['studio', 'Studio'],
+    architect: ['architect', 'Architect'],
+    github: ['github', 'GitHub'],
+    snowflake: ['snowflake', 'Snowflake'],
+    knowledge: ['knowledge', 'Prophet knowledge base'],
+    mcp: ['mcp', 'MCP servers'],
+    clientdata: ['clientdata', 'Client data'],
+    claude: ['claude', 'Claude'],
+    lyzr: ['lyzr', 'Lyzr API'],
+    users: ['users', 'Prophet internal users'],
+    clients: ['clients', 'Clients']
+  };
+  var screens = document.querySelectorAll('.screen');
+  var panes = document.querySelectorAll('[data-pane]');
+  var navs = document.querySelectorAll('[data-nav]');
+  var cwFrame = document.getElementById('cw-frame');
+
+  function setHelp(open) { cwFrame.classList.toggle('help', open); }
+  document.querySelectorAll('.help-open').forEach(function (el) { el.addEventListener('click', function () { setHelp(true); }); });
+  document.getElementById('help-close').addEventListener('click', function () { setHelp(false); });
+  document.getElementById('help-scrim').addEventListener('click', function () { setHelp(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setHelp(false); });
+
+  function fit() {
+    var top = document.querySelector('.top').offsetHeight;
+    var s = Math.min(1, (window.innerWidth - 32) / 1440, (window.innerHeight - top - 28) / 900);
+    document.querySelectorAll('.scaler').forEach(function (el) {
+      el.style.transform = s < 1 ? 'scale(' + s + ')' : '';
+      el.style.marginBottom = s < 1 ? (900 * (s - 1)) + 'px' : '';
+    });
+  }
+
+  // White chips behind diagram line labels, sized from the rendered text.
+  function chips() {
+    ['lbls','lbls2','lbls3'].forEach(function (id) { var g = document.getElementById(id); if (!g || !g.getBoundingClientRect().width) return;
+    g.querySelectorAll('rect').forEach(function (r) { r.parentNode.removeChild(r); });
+    g.querySelectorAll('text').forEach(function (t) {
+      var b = t.getBBox();
+      var r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('class', 'chipbg');
+      r.setAttribute('x', b.x - 9); r.setAttribute('y', b.y - 4);
+      r.setAttribute('width', b.width + 18); r.setAttribute('height', b.height + 8);
+      r.setAttribute('rx', (b.height + 8) / 2);
+      g.insertBefore(r, t);
+    });
+    });
+  }
+
+  function route() {
+    var key = location.hash.slice(1);
+    if (!ROUTES[key]) key = 'diagram';
+    var r = ROUTES[key];
+    screens.forEach(function (s) { s.classList.toggle('on', s.id === 's-' + r[0]); });
+    panes.forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== key; });
+    navs.forEach(function (a) { a.classList.toggle('on', a.getAttribute('data-nav') === key); });
+    document.getElementById('cur').textContent = r[1];
+    document.body.setAttribute('data-route', key);
+    document.title = r[1] + ' — MAIA prototype';
+    setHelp(false);
+    fit();
+    if (r[0] === 'diagram' || r[0] === 'diagram-dev' || r[0] === 'diagram-exec') chips();
+    window.scrollTo(0, 0);
+  }
+
+  window.addEventListener('hashchange', route);
+  window.addEventListener('resize', fit);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(chips);
+  route();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "hybrid-model",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MAIA Cowork + Client MAIA clickable prototype, sitemaps and architecture diagrams",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "npm run build && python3 -m http.server 8765 -d dist",
+    "test": "node scripts/build.mjs && node -e \"require('fs').accessSync('dist/index.html'); console.log('ok: dist/index.html exists')\""
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
